@@ -1,0 +1,2253 @@
+openapi: 3.1.0
+
+info:
+  title: T-Shirt Store API
+  version: 0.1.0
+  description: |
+    REST API for the T-Shirt Store. Self-contained: the roles, the cart edge
+    cases, the deletion policy and the database invariants this contract leans
+    on are all below.
+
+    ## Scope
+
+    Only what the requirements ask for. Where a decision was deliberate rather
+    than an omission, it is listed under **Out of scope** at the end, with the
+    reason. Nothing here is speculative surface built for a use case that does
+    not exist yet.
+
+    ## Conventions
+
+    - JSON only, `camelCase`. Prisma maps to `snake_case` columns.
+    - **Money is a decimal string**, never a JSON number, because a JSON number
+      is an IEEE 754 double in the TypeScript client this API is written for.
+      `"19.99"`, not `19.99`. Single currency, USD.
+    - HTTPS only, HSTS on every response. Versioned in the URL.
+    - No response envelopes. Collections are bare arrays, single resources are
+      bare objects. Pagination travels in `Link` (RFC 8288) and `X-Total-Count`.
+    - Errors are RFC 9457 `application/problem+json`, one shape for the whole
+      API. Clients switch on `type`, never on prose.
+    - Resource mutations return the affected resource when a representation is useful;
+      successful operations with no useful response body return 204
+    - Public catalogue responses are `public, max-age=60`. Anything that varies
+      by role or user is `private, no-store` and lives on its own path, never on
+      the public one behind a flag: one URL returning different bodies by role
+      either leaks or forces `Vary: Authorization` and destroys the cache.
+
+    ## Roles
+
+    - **Anonymous** reads the catalogue.
+    - **Client** reads the catalogue, likes products, manages their own cart,
+      places orders, and cancels their own orders before they ship.
+    - **Manager** manages the catalogue in any state, reads every order, and
+      advances order status from `PAID` through `PROCESSING` to `SHIPPED`.
+    - **Delivery person** (optional feature) reads the orders assigned to them
+      and marks them delivered.
+
+    ## How a refusal is reported
+
+    Three distinct failures, never conflated:
+
+    - **`403`** the caller's role may not perform this action at all.
+    - **`404`** the resource exists but belongs to someone else. A `403` there
+      would confirm that it exists.
+    - **`409`** the caller is allowed but the resource's current state forbids
+      it, such as cancelling an order that already shipped. Not an
+      authorization failure and never reported as one.
+
+    ## Cart, checkout and payment lifecycle
+
+    The cart is a workspace. The order is the record. Nothing is destructive
+    until money has moved.
+
+    1. **Stock moves on payment, not on checkout.** No reservations, no expiry
+       job, no reservation state. A t-shirt restocks, and with high cart
+       abandonment a reservation model holds inventory for people who never pay
+       while real customers see "sold out".
+    2. **An unavailable line is kept and flagged**, never removed and never
+       quietly reduced. It stays with `isAvailable: false` and a reason until
+       the customer acts or stock returns.
+    3. **Checkout is all or nothing.** If any line is unavailable the whole
+       checkout is refused with `409` naming every offender, and nothing is
+       created. The customer fixes the cart and retries. Converting only part of
+       the cart would charge a total the customer never confirmed.
+    4. **The cart is not cleared at checkout.** A declined card leaves the cart
+       lines intact. The promo code is not cart state: it is frozen onto the
+       pending order at checkout.
+    5. **Payment subtracts, it does not empty.** Each order line reduces the
+       matching cart line by the quantity bought; the line is deleted at zero.
+       Anything added after checkout survives.
+    6. **A repeated checkout with an identical cart returns the same order**
+       with `200`. A different cart supersedes the previous pending order, which
+       is marked `SUPERSEDED_BY_NEW_CHECKOUT` and hidden from the customer's own
+       history: they never placed it. Orders are never edited in place, because
+       their lines are frozen snapshots. `uq_one_pending_order` is the backstop.
+    7. **Promo redemptions are written at payment**, never at checkout, so an
+       abandoned order burns nothing. Cancelling a paid order voids the
+       redemption and returns the use.
+    8. **Stock locks are taken in ascending SKU id order**, and so are cart
+       locks, so the two can never form a deadlock cycle.
+
+    ## Cart edge cases
+
+    Availability is derived on read, never stored, so a line recovers on its own
+    when stock returns and no repair job exists.
+
+    | Case | `unavailableReason` | Behaviour |
+    |---|---|---|
+    | Stock hits zero while in cart | `OUT_OF_STOCK` | kept and flagged, never auto-removed |
+    | Stock short but not zero | `INSUFFICIENT_STOCK` | line blocked; the server never silently reduces the quantity |
+    | Variant disabled | `SKU_INACTIVE` | temporary, may recover with no write |
+    | Variant retired | `SKU_RETIRED` | permanent; the client offers removal. Cannot be hard-deleted underneath the cart, because the foreign key is `RESTRICT` |
+    | Product disabled or retired | `PRODUCT_INACTIVE` / `PRODUCT_RETIRED` | derived from the parent, so retiring a product with forty variants is one write |
+    | Several at once | any mix | all flagged with their own reasons, and a checkout returns **every** offender in one `409`, not the first |
+
+    Making a customer's items disappear without explanation is worse than
+    showing them as unavailable, and buying fewer than they asked for is the
+    same class of surprise as charging a different total. That is why nothing is
+    removed or reduced silently.
+
+    Two more states are reachable outside the cart. Two customers racing for the
+    last unit serialise on ascending-id locking, and the loser is refused by the
+    non-negative stock constraint. A redelivered webhook is rejected by the
+    unique event id and treated as already handled, which is the normal path
+    rather than an error path.
+
+    ## Deletion policy
+
+    **No foreign key uses `SET NULL`.** A null in a history-bearing column
+    cannot be told apart from "we never knew". `RESTRICT` is the default, so an
+    accidental hard delete fails loudly instead of quietly erasing an invoice
+    line.
+
+    | Entity | Policy | Why |
+    |---|---|---|
+    | User | deactivate, never delete | orders and status history point at it |
+    | Product, variant | soft (retire) | carts and order lines reference them |
+    | Product image | **hard** | presentation, not history: no order line snapshots a URL |
+    | Like, cart line | hard | a preference and a workspace, not records |
+    | Order, order line | **never** | cancellation is the terminal state |
+    | Promo code | disable | redemptions reference it |
+    | Redemption | void | that a discount was granted stays auditable |
+
+    ## Database invariants
+
+    Named guarantees the descriptions below rely on. Each is enforced by a
+    unique index, partial index, or CHECK constraint, defined in db.dbml or
+    constraints.sql.
+
+    | Name | Guarantees |
+    |---|---|
+    | `uq_sku_variant` | one live variant per product, size and colour. Scoped to non-retired rows, so a disabled variant keeps its slot and only retirement frees it |
+    | `uq_sku_code` | one live variant per code, same scope, so a retired variant's code can be reused by its replacement |
+    | `uq_one_primary_image` | one primary image per product |
+    | `uq_cart_sku` | one cart line per variant: adding a variant already present increases that line's quantity instead of creating a duplicate row |
+    | `uq_order_sku` | one order line per variant, which makes the payment-time cart subtraction one-to-one |
+    | `uq_one_pending_order` | at most one pending order per client, so two tabs cannot produce two |
+    | `chk_orders_link_never_pending` | a Payment Link order is never `PENDING`, which is what keeps the rule above correct |
+    | `chk_orders_superseded_never_paid` | an order replaced by a repeated checkout was never paid, so hiding it from customer history can never hide a real purchase |
+    | `chk_skus_stock` | stock never goes negative: the last line of defence in the race for a final unit |
+
+    ## Payments: tentative blueprint
+
+    Everything tagged `Payments`, and the `paymentEvent` webhook, is a
+    **blueprint pending the Stripe workshop**. Shapes have not been validated
+    against the Stripe API and the endpoints return `501` today. Kept
+    deliberately thin, so that being wrong about it is cheap.
+
+    **Not provisional**, because it follows from the data model rather than from
+    Stripe: webhook idempotency via a unique event id, ascending-id lock
+    ordering, redemption written at payment, and cart subtraction.
+
+    **What is not yet understood:**
+
+    1. Whether a reusable Payment Link can carry per-buyer metadata, or whether
+       each purchase needs its own Checkout Session. The model here assumes a
+       durable per-variant link. **The assumption most likely to be wrong.**
+    2. How an authenticated client is bound to a link opened in a browser with
+       no session. If no identity comes back, a non-null client on every order
+       forces either a guest path or a login wall before the link.
+    3. Whether `checkout.session.completed` or `payment_intent.succeeded` is
+       authoritative for the intent path, and what happens when both arrive.
+    4. What to do when payment succeeds after the stock is gone. The money has
+       moved, so it cannot be a plain failure; the refund path is unknown.
+    5. Where shipping address collection lives, and whether Stripe returns it.
+
+    The raw event payload is stored precisely so the real shapes can be read off
+    data after the workshop instead of guessed now.
+
+    ## Out of scope, on purpose
+
+    Named rather than silently absent, so the boundary is a decision and not an
+    oversight.
+
+    - **Shipping addresses.** Deliberately deferred: Stripe Checkout can collect
+      them, and designing an address book before knowing what the payment flow
+      returns would mean designing it twice. Open question 5.
+    - **Session management** (listing devices, signing out everywhere). Each
+      authenticated session created by sign-up or sign-in has one stored session
+      row and is revoked on sign-out. Nothing in the requirements needs more.
+    - **Partial checkout** (converting the available lines and leaving the rest).
+      All-or-nothing is safer and simpler to reason about; if the store later
+      wants it, it is one request flag, not a redesign.
+    - **Stock ledger.** Stock is a mutable integer: nothing answers "why is
+      stock 4 when we received 10". The correct model is an append-only
+      movements table.
+    - **Email outbox** is out of scope; external delivery guarantees depend on the queue/email provider.
+    - **Guest checkout.** Every order has a client.
+
+servers:
+  - url: https://api.tshirtstore.dev/v1
+    description: Production
+  - url: https://staging.api.tshirtstore.dev/v1
+    description: Staging
+
+tags:
+  - name: Auth
+  - name: Catalog
+    description: Public. Readable by anonymous and authenticated callers alike.
+  - name: Products
+    description: Manager only.
+  - name: Likes
+  - name: Cart
+  - name: Checkout
+  - name: Orders
+  - name: Orders (Manager)
+  - name: Delivery
+    description: Optional features 11 and 12.
+  - name: Promo Codes
+    description: Optional feature 13.
+  - name: Payments
+    description: BLUEPRINT pending the Stripe workshop. Not a contract.
+
+security:
+  - bearerAuth: []
+
+paths:
+  # =================================================================== Auth
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Register a client account
+      description: Creates the client account and its initial authenticated session.
+      operationId: signUp
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignUpRequest' }
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '409':
+          description: That email is already registered
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/sessions:
+    post:
+      tags: [Auth]
+      summary: Sign in
+      description: A session is a resource, so creating one is a POST to its collection.
+      operationId: signIn
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignInRequest' }
+      responses:
+        '201':
+          description: Authenticated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    delete:
+      tags: [Auth]
+      summary: Sign out
+      description: |
+        Revokes the caller's session by stamping `revokedAt` on the row named by
+        the access token's `sessionId` claim. A JWT cannot be invalidated on its
+        own, so revocation applies to the stored session and
+        the short-lived access token is left to expire. That lifetime is
+        therefore the real blast radius of a stolen token, which is why it is
+        short.
+      operationId: signOut
+      responses:
+        '204': { description: Signed out }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/tokens:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for a new access token
+      description: |
+        Rotates the refresh token, so a stolen one is single use. The session
+        row is unchanged.
+
+        On its own collection rather than under `/auth/sessions`, because a
+        literal segment there would collide with a session id, and a route whose
+        meaning depends on which pattern the router tries first is not a
+        contract.
+      operationId: refreshTokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '201':
+          description: New tokens issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '401':
+          description: Unknown, revoked, expired, or already rotated
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /auth/password-reset-requests:
+    post:
+      tags: [Auth]
+      summary: Request a password reset email
+      description: |
+        Always `202`, whether or not the address is registered, so this cannot
+        be used to enumerate accounts. Rate limited per email and per IP.
+      operationId: requestPasswordReset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '202':
+          description: Accepted. An email is sent only if the account exists.
+          headers:
+            X-Rate-Limit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/password:
+    put:
+      tags: [Auth]
+      summary: Set a new password using a reset token
+      description: |
+        Single use: `usedAt` is stamped on redemption. Every session for the
+        user is revoked, so other devices are signed out, and a confirmation
+        email is sent.
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, format: password, minLength: 8 }
+      responses:
+        '204': { description: Password changed }
+        '400':
+          description: The token is unknown, already used, or expired
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ================================================================ Catalog
+  /categories:
+    get:
+      tags: [Catalog]
+      summary: List categories
+      description: |
+        Public. Drives the `category` filter on `GET /products`, and gives a
+        manager the `categoryId` needed to create a product. Seeded, so there is
+        no create endpoint.
+      operationId: listCategories
+      security: []
+      responses:
+        '200':
+          description: Every category
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControlPublic' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Category' }
+        '304': { $ref: '#/components/responses/NotModified' }
+
+  /products:
+    get:
+      tags: [Catalog]
+      summary: List purchasable products
+      operationId: listProducts
+      security: []
+      description: |
+        Active, non-retired products, for every caller including a manager.
+        Availability is derived at read time from current stock, never stored.
+
+        A manager looking for something they disabled will not find it here on
+        purpose: this response is cached by shared caches and must not vary by
+        role. Use `GET /manager/products`.
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { $ref: '#/components/parameters/IfNoneMatch' }
+        - name: category
+          in: query
+          description: Category slug. Repeat for several.
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+        - name: q
+          in: query
+          description: Free-text search over product name.
+          schema: { type: string }
+      responses:
+        '200':
+          description: A page of products, as a bare array
+          headers:
+            Link: { $ref: '#/components/headers/Link' }
+            X-Total-Count: { $ref: '#/components/headers/TotalCount' }
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControlPublic' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProductSummary' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+    post:
+      tags: [Products]
+      summary: Create a product
+      description: |
+        New products are created inactive. The manager uploads at least one
+        image and then activates the product through
+        `PATCH /products/{productId}`. Creation and image upload stay separate
+        requests, so the product never exists publicly without an image.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductWrite' }
+      responses:
+        '201':
+          description: The created product
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /products/{productId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProductId' }
+    get:
+      tags: [Catalog]
+      summary: Get one product
+      description: |
+        Public, and always complete: category, images and purchasable variants
+        are inlined, so a product page is one request.
+
+        `404` for an inactive or retired product, to every caller. A manager
+        reads those through `GET /manager/products`.
+      operationId: getProduct
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/IfNoneMatch' }
+      responses:
+        '200':
+          description: The product
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControlPublic' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Products]
+      summary: Update a product
+      description: |
+        Also the enable and disable switch, through `isActive`. Disabling is
+        temporary and reversible, for stock that will come back; disabled
+        variants keep reserving their size-and-colour slots, which is why a
+        disabled variant is re-enabled rather than recreated.
+
+        **Activating a product requires at least one image.** `primaryImageUrl`
+        is nullable so a manager can create a product and upload its images
+        afterwards, but a product with no image must not reach the storefront:
+        the low-stock email embeds the product's primary image and would
+        otherwise have nothing to send. Setting `isActive: true` on a product
+        with no images is a `409`, checked in the backend at activation rather
+        than at creation.
+      operationId: updateProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductUpdate' }
+      responses:
+        '200':
+          description: The updated product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            The product is retired and retirement is not reversible, or
+            `isActive: true` was sent for a product that has no images.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Products]
+      summary: Retire a product permanently
+      description: |
+        Stamps `deletedAt`. Never a physical delete: order lines reference the
+        product with `RESTRICT`, so a hard delete would fail rather than orphan
+        an invoice line. Still readable through `GET /manager/products`, so
+        retirement is auditable rather than a disappearance.
+
+        Does not touch variants: `isPurchasable` derives from the parent, so
+        every variant of a retired product becomes unpurchasable without any
+        write. Carts holding one keep the line, flagged `PRODUCT_RETIRED`.
+
+        Distinct from disabling, which is `isActive` on the PATCH above.
+      operationId: retireProduct
+      responses:
+        '204': { description: Retired }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /products/{productId}/images:
+    post:
+      tags: [Products]
+      summary: Upload a product image
+      description: |
+        Stored in S3; the row keeps the object URL and its key, so the object
+        can later be removed without parsing a public URL. At most one image per
+        product may be primary, enforced by `uq_one_primary_image`; the first
+        image uploaded becomes primary automatically when the product has no
+        primary yet, so an image-bearing product always has one to show.
+      operationId: addProductImage
+      parameters:
+        - { $ref: '#/components/parameters/ProductId' }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                isPrimary: { type: boolean, default: false }
+                position: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '201':
+          description: The created image
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductImage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: The file exceeds the upload limit
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '415':
+          description: Unsupported image type
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /products/{productId}/images/{imageId}:
+    delete:
+      tags: [Products]
+      summary: Delete an image
+      description: |
+        The inverse of the upload, so a mistaken one is not permanent. A hard
+        delete, and the only one in the catalogue: an image is presentation, not
+        history, since order lines snapshot the product name and variant
+        attributes and never an image URL. The S3 object goes with the row.
+
+        If another image exists, the next image by position becomes primary.
+
+        **The last image of an ACTIVE product cannot be deleted**, since an
+        active product must have an image for the low-stock email to embed. A
+        manager who wants to remove it disables the product first. For an
+        INACTIVE product, deleting the last image is allowed.
+      operationId: deleteProductImage
+      parameters:
+        - { $ref: '#/components/parameters/ProductId' }
+        - name: imageId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The last image of an active product cannot be deleted
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /products/{productId}/skus:
+    parameters:
+      - { $ref: '#/components/parameters/ProductId' }
+    get:
+      tags: [Catalog]
+      summary: List a product's live variants
+      description: |
+        Public. Active, non-retired variants of an active, non-retired product.
+        A manager sees the rest through `GET /manager/products`.
+      operationId: listSkus
+      security: []
+      responses:
+        '200':
+          description: The variants
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Sku' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Products]
+      summary: Create a variant
+      description: |
+        A `409` means a live variant already occupies that size and colour, or
+        that code, enforced by `uq_sku_variant` and `uq_sku_code`. Both are
+        scoped to `deletedAt IS NULL`, not to `isActive`: a disabled variant
+        keeps its slot because it is coming back, and only retirement frees it.
+
+        The conflict body carries `existingSkuId` and `existingState`, so the
+        client can offer "re-enable it" rather than a dead end.
+      operationId: createSku
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkuWrite' }
+      responses:
+        '201':
+          description: The created variant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sku' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: A live variant with this size and colour, or this code, already exists
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/SkuConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /skus/{skuId}:
+    parameters:
+      - { $ref: '#/components/parameters/SkuId' }
+    patch:
+      tags: [Products]
+      summary: Update a variant
+      description: |
+        Size and colour are not editable. A variant already sitting in
+        customers' carts must not silently become a different variant, and an
+        edit could collide with `uq_sku_variant`.
+
+        Changing the price does not rewrite any order: cart lines hold a
+        reference, and `unitPrice` is frozen when the order is created.
+
+        **Stock changes go through the same path as a purchase.** Any write that
+        takes the parent product's total purchasable stock down to
+        `LOW_STOCK_THRESHOLD`, which is 3 for this challenge, enqueues a
+        background job; any write that takes it back above increments
+        `lowStockCycle` and re-arms it. Hanging that on the manager edit alone
+        would miss the way stock actually falls.
+
+        The job sends an email, including the product's primary image, to every
+        user who liked the product and has not bought it. The image is always
+        there to send, because a product cannot be activated without one.
+
+        One notification per recipient per product per drawdown: the
+        deduplication key is the product and its `lowStockCycle`, not the
+        variant, because a product with five sizes would otherwise fire five
+        times for one event. That key prevents duplicate notification records;
+        exact external email-delivery semantics depend on the queue and email
+        provider and are not modelled here.
+      operationId: updateSku
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkuUpdate' }
+      responses:
+        '200':
+          description: The updated variant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sku' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: That code is already taken by another live variant
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/SkuConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Products]
+      summary: Retire a variant permanently
+      description: |
+        Stamps `deletedAt` and frees its size-and-colour slot and its code.
+        Never a physical delete: cart lines and order lines reference it with
+        `RESTRICT`, which is what makes "deleting a variant cannot corrupt a
+        cart" a database fact rather than a code review promise.
+
+        Carts holding it keep the line, flagged `SKU_RETIRED`.
+      operationId: retireSku
+      responses:
+        '204': { description: Retired }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /manager/products:
+    get:
+      tags: [Products]
+      summary: List products in any state, with their variants
+      description: |
+        Manager only, and what makes disabling reversible. A product turned off
+        through `PATCH /products/{productId}` vanishes from `GET /products`, and
+        without this listing the only way back would be to already know its id.
+        Variants are inlined in every state too, which is where the occupant of
+        a contested size-and-colour slot is found and re-enabled.
+
+        A separate collection rather than a flag on the public listing, because
+        one URL returning different bodies to different roles either leaks
+        manager data to an anonymous visitor or forces `Vary: Authorization` and
+        throws the cache away.
+
+        Defaults to every state.
+      operationId: listProductsForManager
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+        - name: state
+          in: query
+          description: Repeat for several. Omitted means all three.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/LifecycleState' }
+          style: form
+          explode: true
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: A page of products in any state
+          headers:
+            Link: { $ref: '#/components/headers/Link' }
+            X-Total-Count: { $ref: '#/components/headers/TotalCount' }
+            Cache-Control: { $ref: '#/components/headers/CacheControlPrivate' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Product' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ================================================================== Likes
+  /products/{productId}/like:
+    parameters:
+      - { $ref: '#/components/parameters/ProductId' }
+    put:
+      tags: [Likes]
+      summary: Like a product
+      description: Idempotent, which is why it is a PUT. Liking twice is not an error.
+      operationId: likeProduct
+      responses:
+        '204': { description: Liked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Likes]
+      summary: Remove a like
+      operationId: unlikeProduct
+      responses:
+        '204': { description: Unliked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /me/likes:
+    get:
+      tags: [Likes]
+      summary: Products the caller has liked
+      description: |
+        Needed to render the liked state, since the public product
+        representation is cacheable and therefore cannot carry a per-user flag.
+
+        This relation is also the audience for the low-stock notification: liked
+        the product, and has no paid, non-cancelled order containing any of its
+        variants.
+      operationId: listMyLikes
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200':
+          description: Liked products
+          headers:
+            Link: { $ref: '#/components/headers/Link' }
+            X-Total-Count: { $ref: '#/components/headers/TotalCount' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProductSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # =================================================================== Cart
+  /me/cart:
+    get:
+      tags: [Cart]
+      summary: Get the caller's cart
+      description: |
+        Every line carries `isAvailable`, derived at read time from current
+        stock and the lifecycle state of the variant and its product.
+        Availability is never stored, so a line becomes buyable again on its own
+        when stock returns and no repair job exists.
+
+        An unavailable line is kept and flagged, never removed and never quietly
+        reduced. `unavailableItemCount` lets a client disable the checkout
+        button without scanning the array; the six reasons and what to do with
+        each are tabulated under **Cart edge cases** above.
+
+        `subtotalAmount` is the sum of every line. Since checkout is all or
+        nothing, it is what a checkout charges precisely when
+        `unavailableItemCount` is zero, and a checkout charges nothing at all
+        otherwise.
+
+        Nothing here is a reservation. This response can go stale a second after
+        it is sent; the authoritative check runs inside the checkout
+        transaction.
+      operationId: getMyCart
+      responses:
+        '200':
+          description: The cart
+          headers:
+            Cache-Control: { $ref: '#/components/headers/CacheControlPrivate' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/cart/items:
+    post:
+      tags: [Cart]
+      summary: Add a variant to the cart
+      description: |
+        One cart line per variant, enforced by `uq_cart_sku`. Adding a variant
+        already present in the cart increases that line's quantity instead of
+        creating a duplicate row.
+
+        The cart holds a reference, not a reservation.
+      operationId: addCartItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [skuId, quantity]
+              properties:
+                skuId: { type: string, format: uuid }
+                quantity: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: The updated cart
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The variant is unavailable or has insufficient stock
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/StockConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /me/cart/items/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Cart]
+      summary: Change a line's quantity
+      description: |
+        Requesting more than is in stock is refused with `409` carrying
+        `available`, so the client can offer "reduce to N". The server never
+        reduces the quantity on the customer's behalf.
+      operationId: updateCartItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: The updated cart
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Insufficient stock for the requested quantity
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/StockConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Cart]
+      summary: Remove a line
+      operationId: removeCartItem
+      responses:
+        '204': { description: Removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =============================================================== Checkout
+  /checkouts:
+    post:
+      tags: [Checkout]
+      summary: Turn the cart into a pending order
+      description: |
+        Creates an order in `PENDING` with `paymentMethod: PAYMENT_INTENT` and
+        returns it. Nothing is reserved and no stock moves: that happens when
+        payment is confirmed.
+
+        **Availability is re-checked here, inside the transaction.** The cart
+        read is advisory; this check is authoritative.
+
+        **All or nothing.** If any line cannot be fulfilled, the whole checkout
+        is refused with `409` naming every offender, not just the first, and
+        nothing is created. Converting only part of the cart would charge a
+        total the customer never confirmed, so the customer fixes the cart and
+        retries.
+
+        **A repeated checkout with an unchanged cart is not a new order.** If a
+        pending order exists and its lines and promo code match the cart exactly,
+        that same order is returned with `200`. Only a different cart supersedes
+        the previous pending order, which is then marked
+        `SUPERSEDED_BY_NEW_CHECKOUT`, hidden from the customer's own history and
+        recorded in the status history. Orders are never edited in place, because
+        their lines are frozen snapshots. `uq_one_pending_order` is the backstop.
+
+        **The cart is not cleared here.** It is subtracted line by line when
+        payment is confirmed, so a declined card leaves the cart lines intact.
+        The promo code is frozen onto the pending order, not held in the cart.
+
+        Every line is snapshotted into the order: product name, variant code,
+        size, colour and unit price are frozen now, so a later price change or a
+        retired product can never rewrite what was bought.
+      operationId: createCheckout
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                promoCode:
+                  type: [string, 'null']
+                  description: Optional feature 13. Validated against the cart subtotal.
+      responses:
+        '200':
+          description: |
+            An identical pending order already existed and is returned
+            unchanged. Nothing was created and nothing was superseded.
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '201':
+          description: A pending order
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: |
+            One or more lines cannot be fulfilled. Each is listed so the client
+            can point at exactly which items are the problem, rather than
+            showing a generic failure.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CheckoutConflict' }
+        '422':
+          description: The cart is empty, or the promo code is not applicable
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ValidationProblem' }
+
+  # ================================================================= Orders
+  /me/orders:
+    get:
+      tags: [Orders]
+      summary: The caller's order history
+      description: |
+        Requirement 9. Defaults to real purchases: `paidAt IS NOT NULL`. That
+        single predicate is deliberate. Listing statuses instead would drop an
+        order that was paid and later cancelled, which is genuine history, while
+        abandoned pending orders are not history at all.
+
+        **Orders cancelled with `SUPERSEDED_BY_NEW_CHECKOUT` are never returned
+        here**, not even with `status=CANCELLED`. The customer never placed
+        them. `chk_orders_superseded_never_paid` guarantees such a row can never
+        have been paid, so this exclusion can never hide a real purchase.
+
+        Pass `status` explicitly to see other states.
+      operationId: listMyOrders
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+        - name: from
+          in: query
+          description: 'Inclusive lower bound on `createdAt`: `createdAt >= from` at 00:00 UTC.'
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: 'Inclusive upper bound, whole UTC day: `createdAt < to + 1 day`.'
+          schema: { type: string, format: date }
+        - name: status
+          in: query
+          description: Repeat for several. Overrides the paid-only default.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/OrderStatus' }
+          style: form
+          explode: true
+        - name: minTotal
+          in: query
+          schema: { $ref: '#/components/schemas/Money' }
+        - name: maxTotal
+          in: query
+          schema: { $ref: '#/components/schemas/Money' }
+      responses:
+        '200':
+          description: A page of orders
+          headers:
+            Link: { $ref: '#/components/headers/Link' }
+            X-Total-Count: { $ref: '#/components/headers/TotalCount' }
+            Cache-Control: { $ref: '#/components/headers/CacheControlPrivate' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Get one order
+      description: |
+        A client may read only their own; a manager may read any. A superseded
+        order is readable by its owner here even though it is hidden from the
+        listing: a direct id is an explicit request, not a browse.
+
+        Always complete: lines with quantities and unit prices, payment method,
+        total, status and the full status history. Requirement 9 asks for them,
+        so there is no flag to get them wrong with.
+      operationId: getOrder
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      responses:
+        '200':
+          description: The order
+          headers:
+            Cache-Control: { $ref: '#/components/headers/CacheControlPrivate' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderDetail' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /orders/{orderId}/cancellation:
+    put:
+      tags: [Orders]
+      summary: Cancel an order
+      description: |
+        The order's owner, and only the owner. Allowed before the order has
+        shipped. Stamps `cancelledAt`, records `cancelledBy` as the caller and
+        sets `cancellationReason` to `CUSTOMER_REQUEST`, which is the only
+        reason this endpoint ever writes.
+
+        `SUPERSEDED_BY_NEW_CHECKOUT` is system-only: the checkout transaction
+        produces it, and it is the difference between an order someone chose to
+        cancel and one that never existed for the customer.
+
+        An order is never deleted, hard or soft: cancellation is its terminal
+        state, because an order is financial history.
+
+        **If `paidAt` is set, stock is restored** for every line in the same
+        transaction, locks in ascending variant id order so it matches the
+        decrement path exactly. If that restore takes the product back above the
+        low-stock threshold, `lowStockCycle` increments and the notification
+        re-arms.
+
+        **If a promo code was redeemed, the redemption is voided** in the same
+        transaction, returning the use to the pool. The row is kept with
+        `voidedAt` stamped, so the discount that was granted stays auditable.
+
+        Refund mechanics are BLUEPRINT pending the Stripe workshop; the state
+        transition above is not.
+      operationId: cancelOrder
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: [string, 'null'], maxLength: 255 }
+      responses:
+        '200':
+          description: The cancelled order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Already shipped, or already cancelled
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/TransitionConflict' }
+
+  /orders:
+    get:
+      tags: [Orders (Manager)]
+      summary: All client orders
+      description: |
+        Manager only, and the one place where superseded orders are visible.
+        Excluded by default so the operational queue is not polluted by double
+        clicks.
+      operationId: listOrders
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+        - name: status
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/OrderStatus' }
+          style: form
+          explode: true
+        - name: clientId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: includeSuperseded
+          in: query
+          description: Include orders cancelled by a repeated checkout.
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: A page of orders
+          headers:
+            Link: { $ref: '#/components/headers/Link' }
+            X-Total-Count: { $ref: '#/components/headers/TotalCount' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /orders/{orderId}/status:
+    put:
+      tags: [Orders (Manager)]
+      summary: Advance an order's status
+      description: |
+        `PAID` to `PROCESSING` to `SHIPPED`. `PAID` is set by the payment
+        webhook and never by hand; `DELIVERED` belongs to the delivery role.
+        Every transition appends to the status history with the actor.
+
+        An illegal transition answers `409` carrying `allowedNext`, so a client
+        can render the right buttons instead of guessing. That is a state
+        failure, not an authorization failure.
+      operationId: setOrderStatus
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [PROCESSING, SHIPPED]
+                  description: |
+                      Cancellation is not handled through this status endpoint.
+                      Clients cancel their own orders through
+                      `PUT /orders/{orderId}/cancellation`.
+                reason: { type: [string, 'null'], maxLength: 255 }
+      responses:
+        '200':
+          description: The updated order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Illegal transition from the current status
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/TransitionConflict' }
+
+  /orders/{orderId}/delivery-person:
+    put:
+      tags: [Orders (Manager)]
+      summary: Assign a delivery person
+      description: |
+        Optional feature 11. The foreign key only guarantees the target is a
+        user, so the role is checked here: assigning someone who is not an
+        active `DELIVERY_PERSON` is a `422`.
+      operationId: assignDeliveryPerson
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliveryPersonId]
+              properties:
+                deliveryPersonId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The updated order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: The target is not an active delivery person
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # =============================================================== Delivery
+  /me/deliveries:
+    get:
+      tags: [Delivery]
+      summary: Orders assigned to the caller
+      description: Optional feature 11. Shipped orders assigned to this person.
+      operationId: listMyDeliveries
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+        - name: delivered
+          in: query
+          description: False for the queue, true for the caller's delivery history.
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Assigned orders
+          headers:
+            Link: { $ref: '#/components/headers/Link' }
+            X-Total-Count: { $ref: '#/components/headers/TotalCount' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /orders/{orderId}/delivery:
+    put:
+      tags: [Delivery]
+      summary: Mark an order delivered
+      description: Optional feature 12. The only transition this role may make.
+      operationId: markDelivered
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      responses:
+        '200':
+          description: The delivered order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: |
+            No such order, or it is not assigned to the caller. Assignment is an
+            ownership check, so it answers `404` rather than `403`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: The order is assigned to the caller but has not shipped
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/TransitionConflict' }
+
+  # ============================================================ Promo Codes
+  /promo-codes:
+    get:
+      tags: [Promo Codes]
+      summary: List promo codes
+      operationId: listPromoCodes
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+        - name: active
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: A page of promo codes
+          headers:
+            Link: { $ref: '#/components/headers/Link' }
+            X-Total-Count: { $ref: '#/components/headers/TotalCount' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PromoCode' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Promo Codes]
+      summary: Create a promo code
+      operationId: createPromoCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PromoCodeWrite' }
+      responses:
+        '201':
+          description: The created promo code
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromoCode' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: That code already exists
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /promo-codes/{code}:
+    patch:
+      tags: [Promo Codes]
+      summary: Update a promo code
+      description: |
+        Also the enable and disable switch, through `isActive`. `code` and
+        `discountType` are not editable, because existing redemptions reference
+        them and changing either would rewrite what a customer already got.
+      operationId: updatePromoCode
+      parameters:
+        - { $ref: '#/components/parameters/PromoCode' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PromoCodeUpdate' }
+      responses:
+        '200':
+          description: The updated promo code
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromoCode' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /me/cart/promo-code-check/{code}:
+    get:
+      tags: [Promo Codes]
+      summary: Check whether a code applies to the caller's cart
+      description: |
+        Validates that the code exists, is active, has not expired, has not
+        reached its usage limit, and that the cart meets any minimum purchase.
+
+        Usage is counted from live redemption rows, not from a stored counter: a
+        counter drifts under concurrent checkouts. Redemptions are written at
+        payment, so a code is not consumed by anyone who started a checkout and
+        walked away.
+
+        Advisory, like the cart. The last use of a limited code can be taken by
+        another customer between this call and payment, so a `valid` answer here
+        is not a hold. `usageLimit` is strict: consumption is serialised by
+        locking the promo code row inside the payment transaction, so the limit
+        is never knowingly exceeded.
+      operationId: checkPromoCode
+      parameters:
+        - { $ref: '#/components/parameters/PromoCode' }
+      responses:
+        '200':
+          description: The validation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromoCodeCheck' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # =============================================================== Payments
+  /payments/intents:
+    post:
+      tags: [Payments]
+      summary: BLUEPRINT. Create a payment intent for a pending order
+      description: |
+        Requirement 7B. BLUEPRINT pending the Stripe workshop; shapes not
+        validated against the Stripe API. Returns `501` today.
+
+        Intended behaviour: create a PaymentIntent for the order's total, store
+        the intent id, and let the webhook do the rest.
+
+        Immediately before creating the PaymentIntent, re-check current stock
+        availability for every order line. If any line can no longer be fulfilled,
+        do not create the PaymentIntent and return a stock conflict. This check is
+        necessary because stock may have changed after the pending order was
+        created and the cart does not reserve inventory.
+      operationId: createPaymentIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId]
+              properties:
+                orderId: { type: string, format: uuid }
+      responses:
+        '501': { $ref: '#/components/responses/NotImplemented' }
+
+  /skus/{skuId}/payment-link:
+    post:
+      tags: [Payments]
+      summary: BLUEPRINT. Generate a shareable payment link for one variant
+      description: |
+        Requirement 7A. BLUEPRINT pending the Stripe workshop. Returns `501`
+        today.
+
+        Modelled as a durable object per variant that a manager creates once and
+        shares. **No order row is created here**, and no `PENDING` order ever
+        exists for this path: a shareable link may be opened by anyone, at any
+        time, or never, and creating a pending order per click would invent
+        orders for people who only looked. The order is written by the webhook,
+        already paid, which is also what keeps `uq_one_pending_order` correct as
+        a plain "one pending order per client".
+
+        Whether a reusable link can carry per-buyer metadata is open question 1
+        and is the assumption here most likely to be wrong.
+      operationId: createPaymentLink
+      parameters:
+        - { $ref: '#/components/parameters/SkuId' }
+      responses:
+        '501': { $ref: '#/components/responses/NotImplemented' }
+
+# OpenAPI 3.1 describes incoming webhooks as a first-class top-level object.
+# In 3.0 this could only be faked as an ordinary path.
+webhooks:
+  paymentEvent:
+    post:
+      tags: [Payments]
+      summary: BLUEPRINT. Stripe event receiver
+      operationId: receivePaymentEvent
+      security: []
+      description: |
+        BLUEPRINT pending the Stripe workshop. The payload shape below is a
+        guess. What the handler does with it is not, because it follows from the
+        data model rather than from Stripe.
+
+        **Payment Intent path** (`payment_intent.succeeded`), one transaction:
+
+        1. mark the order `PAID`, stamp `paidAt`;
+        2. decrement stock for every line, locks in ascending variant id order;
+        3. write the redemption row, if a promo code was applied;
+        4. subtract the purchased quantities from the cart;
+        5. re-evaluate low stock and enqueue notifications.
+
+        **Payment Link path** (`checkout.session.completed`): the same, except
+        the order is *created* here, already `PAID`, with
+        `paymentMethod: PAYMENT_LINK`, and there is no cart to subtract.
+
+        **Locks in ascending variant id order.** A deadlock cycle needs one
+        transaction holding a high id while waiting for a low one; one global
+        ordering makes that impossible. Two customers racing for the last unit
+        serialise: the first succeeds, the second is refused by `chk_skus_stock`.
+        What to do with that second payment, which has already been taken, is
+        open question 4.
+
+        **Redemption at payment, not checkout, and `usageLimit` is strict.**
+        Inside the same transaction the handler locks the promo code row, counts
+        its live redemptions, re-checks the limit while holding the lock, and
+        inserts only if capacity remains. Every handler consuming a code follows
+        that sequence, which serialises the final use. What to do when capacity
+        is gone but the payment already succeeded at the provider is BLUEPRINT:
+        it depends on reconciliation behaviour that has not been validated.
+
+        **The cart is subtracted, not emptied.** Lines added after the order was
+        created are untouched. Clearing the cart wholesale would delete items
+        the customer never paid for.
+
+        **Idempotency.** Stripe delivers at least once, so processing is
+        idempotent via a unique constraint on the event id: a redelivered event
+        conflicts and is treated as handled. The raw payload is stored so a
+        handler that fails midway can be replayed instead of losing a payment,
+        and so the real event shapes can be read off data after the workshop
+        instead of guessed now.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, type]
+              properties:
+                id: { type: string }
+                type: { type: string }
+                data: { type: object }
+      responses:
+        '204': { description: 'Handled, or already handled' }
+        '400': { description: Signature verification failed }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        A short-lived access token carrying three claims: the user id, the role,
+        and `sessionId`, which identifies the row that `DELETE /auth/sessions`
+        revokes. Obtain one from `POST /auth/sessions`, renew it with
+        `POST /auth/tokens`.
+
+  headers:
+    Link:
+      description: |
+        RFC 8288 pagination. Carries `first`, `prev`, `next` and `last` where
+        they apply, so a client follows links instead of computing offsets.
+      schema: { type: string }
+      example: '<https://api.tshirtstore.dev/v1/products?offset=40&limit=20>; rel="next"'
+    TotalCount:
+      description: Total matching resources, ignoring pagination.
+      schema: { type: integer }
+    ETag:
+      description: Send it back as `If-None-Match` to get a `304` when unchanged.
+      schema: { type: string }
+    CacheControlPublic:
+      description: Catalogue responses are cacheable by shared caches.
+      schema: { type: string }
+      example: 'public, max-age=60'
+    CacheControlPrivate:
+      description: Per-user or per-role data. Never stored by a shared cache.
+      schema: { type: string }
+      example: 'private, no-store'
+    Location:
+      description: URL of the created resource.
+      schema: { type: string, format: uri }
+    RateLimitRemaining:
+      description: Requests left in the current window.
+      schema: { type: integer }
+    RetryAfter:
+      description: Seconds to wait before retrying.
+      schema: { type: integer }
+
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SkuId:
+      name: skuId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      description: A previously returned `ETag`. Yields `304` when nothing changed.
+      schema: { type: string }
+    PromoCode:
+      name: code
+      in: path
+      required: true
+      schema: { type: string, maxLength: 50 }
+
+  responses:
+    NotModified:
+      description: Unchanged since the supplied `ETag`.
+    Unauthorized:
+      description: No credentials, or they are invalid, expired or revoked
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Authenticated, but the caller's role does not permit this
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: |
+        No such resource, or it is not visible to the caller. Ownership failures
+        answer `404` rather than `403` so the API does not confirm that someone
+        else's resource exists.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ValidationError:
+      description: The request failed validation
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ValidationProblem' }
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+        X-Rate-Limit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotImplemented:
+      description: Blueprint endpoint, not built yet
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    # ---- Errors: RFC 9457. One shape for every failure in the API. ----
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Stable URI naming the error kind. Clients switch on this, not on prose.
+          default: about:blank
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+      examples:
+        - type: 'https://api.tshirtstore.dev/errors/order-already-shipped'
+          title: Order already shipped
+          status: 409
+          detail: Order 3f2a can no longer be cancelled because it shipped on 2026-08-14.
+
+    ValidationProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            errors:
+              type: array
+              description: One entry per rejected field, so a form highlights them all at once.
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+
+    StockConflict:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            skuId: { type: string, format: uuid }
+            requested: { type: integer }
+            available:
+              type: integer
+              description: Lets the client offer "reduce to this" instead of a dead end.
+            reason: { $ref: '#/components/schemas/UnavailableReason' }
+
+    CheckoutConflict:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            unavailableItems:
+              type: array
+              description: |
+                Every line that blocked the checkout, so the client can name
+                them rather than showing a generic failure.
+              items:
+                type: object
+                properties:
+                  itemId: { type: string, format: uuid }
+                  skuId: { type: string, format: uuid }
+                  skuCode: { type: string }
+                  productName: { type: string }
+                  requested: { type: integer }
+                  available: { type: integer }
+                  reason: { $ref: '#/components/schemas/UnavailableReason' }
+
+    SkuConflict:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            existingSkuId: { type: string, format: uuid }
+            existingState:
+              $ref: '#/components/schemas/LifecycleState'
+              description: |
+                `INACTIVE` means enable the existing variant rather than create
+                a new one. `ACTIVE` means the slot is genuinely taken.
+                `RETIRED` never appears, because retirement frees the slot.
+
+    TransitionConflict:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            currentStatus: { $ref: '#/components/schemas/OrderStatus' }
+            requestedStatus:
+              oneOf:
+                - { $ref: '#/components/schemas/OrderStatus' }
+                - { type: 'null' }
+            allowedNext:
+              type: array
+              items: { $ref: '#/components/schemas/OrderStatus' }
+
+    UnavailableReason:
+      type: string
+      enum:
+        - OUT_OF_STOCK
+        - INSUFFICIENT_STOCK
+        - SKU_INACTIVE
+        - SKU_RETIRED
+        - PRODUCT_INACTIVE
+        - PRODUCT_RETIRED
+      description: |
+        Why a cart line cannot be converted. `*_INACTIVE` is temporary and the
+        line may recover on its own; `*_RETIRED` is permanent and the client
+        should offer to remove it. Per-case handling under **Cart edge cases**.
+
+    LifecycleState:
+      type: string
+      enum: [ACTIVE, INACTIVE, RETIRED]
+      description: |
+        Derived from `isActive` and `deletedAt` in one field, because three
+        overlapping booleans is how a manager ends up not knowing why a row is
+        hidden. `INACTIVE` is reversible, `RETIRED` is not.
+
+    Money:
+      type: string
+      pattern: '^\d+\.\d{2}$'
+      description: |
+        A decimal string with exactly two places, backed by `decimal(10,2)`.
+        Not a JSON number: that is an IEEE 754 double in the TypeScript client
+        this API is written for. Single currency, USD.
+      examples: ['19.99', '0.00']
+
+    PositiveMoney:
+      type: string
+      pattern: '^(?!0+\.00$)\d+\.\d{2}$'
+      description: A Money value greater than zero.
+      examples: ['19.99']
+
+    # ---- Auth ----
+    SignUpRequest:
+      type: object
+      required: [email, password, firstName, lastName]
+      properties:
+        email: { type: string, format: email, maxLength: 255 }
+        password: { type: string, format: password, minLength: 8 }
+        firstName: { type: string, maxLength: 100 }
+        lastName: { type: string, maxLength: 100 }
+
+    SignInRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, user]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer, description: Access token lifetime in seconds. }
+        user: { $ref: '#/components/schemas/User' }
+
+    UserRole:
+      type: string
+      enum: [MANAGER, CLIENT, DELIVERY_PERSON]
+
+    User:
+      type: object
+      required: [id, email, firstName, lastName, role]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        role: { $ref: '#/components/schemas/UserRole' }
+
+    # ---- Catalogue ----
+    Category:
+      type: object
+      required: [id, name, slug]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+
+    ProductImage:
+      type: object
+      required: [id, url, isPrimary, position]
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        isPrimary: { type: boolean }
+        position: { type: integer, minimum: 0 }
+
+    ProductSummary:
+      type: object
+      required: [id, name, category, primaryImageUrl, priceFrom, inStock]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        primaryImageUrl:
+          type: [string, 'null']
+          format: uri
+          description: |
+            May be null for a non-active product.
+            Any ACTIVE product exposed through
+            the storefront is guaranteed to have a primary image.
+        priceFrom:
+          oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }]
+          description: Lowest price among purchasable variants. Derived.
+        inStock:
+          type: boolean
+          description: Derived at read time. True when any purchasable variant has stock.
+
+    Product:
+      allOf:
+        - $ref: '#/components/schemas/ProductSummary'
+        - type: object
+          required: [state, images, skus, createdAt]
+          properties:
+            description: { type: [string, 'null'] }
+            isActive:
+              type: boolean
+              description: The stored toggle. Reversible, unlike retirement.
+            state:
+              $ref: '#/components/schemas/LifecycleState'
+              description: |
+                Derived from `isActive` and `retiredAt`. Always `ACTIVE` on
+                public endpoints; the other two appear only under `/manager`.
+            retiredAt: { type: [string, 'null'], format: date-time }
+            lowStockCycle:
+              type: integer
+              description: |
+                Increments when total purchasable stock rises back above the
+                threshold, re-arming the low-stock notification for customers
+                already told about the previous drawdown. Product-level, because
+                likes are product-level: keying it per variant would send one
+                customer one email per size for a single drawdown.
+            createdAt: { type: string, format: date-time }
+            images:
+              type: array
+              items: { $ref: '#/components/schemas/ProductImage' }
+            skus:
+              type: array
+              items: { $ref: '#/components/schemas/Sku' }
+
+    ProductWrite:
+      type: object
+      required: [categoryId, name]
+      properties:
+        categoryId: { type: string, format: uuid }
+        name: { type: string, maxLength: 200, minLength: 1 }
+        description: { type: [string, 'null'] }
+
+    ProductUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        categoryId: { type: string, format: uuid }
+        name: { type: string, maxLength: 200, minLength: 1 }
+        description: { type: [string, 'null'] }
+        isActive:
+          type: boolean
+          description: Enable or disable. Temporary and reversible.
+
+    Sku:
+      type: object
+      required: [id, skuCode, size, color, price, stockQuantity, isActive, state, isPurchasable]
+      properties:
+        id: { type: string, format: uuid }
+        skuCode:
+          type: string
+          maxLength: 64
+          description: |
+            Unique among live variants only, per `uq_sku_code`. Order history
+            disambiguates by `skuId`, never by this, so a code reused after a
+            retirement cannot confuse an invoice.
+        size: { type: string, maxLength: 20 }
+        color: { type: string, maxLength: 40 }
+        price: { $ref: '#/components/schemas/PositiveMoney' }
+        stockQuantity: { type: integer, minimum: 0 }
+        isActive: { type: boolean }
+        state:
+          $ref: '#/components/schemas/LifecycleState'
+          description: |
+            A variant holding a size-and-colour slot while `INACTIVE` is exactly
+            the case the `409` on variant creation points at.
+        retiredAt: { type: [string, 'null'], format: date-time }
+        isPurchasable:
+          type: boolean
+          description: |
+            Derived: active, not retired, in stock, and its product is active
+            and not retired. The flag a storefront should use.
+
+    SkuWrite:
+      type: object
+      required: [skuCode, size, color, price]
+      properties:
+        skuCode: { type: string, maxLength: 64, minLength: 1 }
+        size: { type: string, maxLength: 20, minLength: 1 }
+        color: { type: string, maxLength: 40, minLength: 1 }
+        price: { $ref: '#/components/schemas/PositiveMoney' }
+        stockQuantity: { type: integer, minimum: 0, default: 0 }
+
+    SkuUpdate:
+      type: object
+      minProperties: 1
+      description: |
+        Size and colour are deliberately absent. A variant already sitting in
+        customers' carts must not silently become a different variant.
+      properties:
+        skuCode: { type: string, maxLength: 64, minLength: 1 }
+        price: { $ref: '#/components/schemas/PositiveMoney' }
+        stockQuantity: { type: integer, minimum: 0 }
+        isActive: { type: boolean }
+
+    # ---- Cart ----
+    CartItem:
+      type: object
+      required: [id, sku, productId, productName, quantity, unitPrice, lineTotal, isAvailable, unavailableReason]
+      properties:
+        id: { type: string, format: uuid }
+        sku: { $ref: '#/components/schemas/Sku' }
+        productId: { type: string, format: uuid }
+        productName: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+          description: The variant's current price. Frozen only when an order is created.
+        lineTotal: { $ref: '#/components/schemas/Money' }
+        isAvailable:
+          type: boolean
+          description: |
+            Derived at read time, never stored. False when stock is short for
+            the requested quantity, or the variant or its product is inactive or
+            retired.
+        unavailableReason:
+          oneOf:
+            - { $ref: '#/components/schemas/UnavailableReason' }
+            - { type: 'null' }
+
+    Cart:
+      type: object
+      required: [id, items, subtotalAmount, itemCount, unavailableItemCount, canCheckout, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        items:
+          type: array
+          description: Every line, available or not, in the order they were added.
+          items: { $ref: '#/components/schemas/CartItem' }
+        subtotalAmount:
+          $ref: '#/components/schemas/Money'
+          description: |
+            Sum of every line at current prices. Since checkout is all or
+            nothing, this is what a checkout charges precisely when
+            `unavailableItemCount` is zero, and a checkout charges nothing at
+            all otherwise.
+        itemCount: { type: integer, description: Number of lines, available or not. }
+        unavailableItemCount:
+          type: integer
+          description: |
+            Lets a client disable the checkout button without scanning the
+            array. Above 0, a checkout will be refused.
+        canCheckout:
+          type: boolean
+          description: True when the cart is not empty and no line is blocked.
+        updatedAt: { type: string, format: date-time }
+
+    # ---- Orders ----
+    OrderStatus:
+      type: string
+      enum: [PENDING, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED]
+
+    CancellationReason:
+      type: string
+      enum: [CUSTOMER_REQUEST, SUPERSEDED_BY_NEW_CHECKOUT]
+      description: |
+        Why a cancelled order is cancelled. `CANCELLED` alone cannot tell a
+        customer's decision apart from bookkeeping.
+
+        - `CUSTOMER_REQUEST`: the owner cancelled it. `cancelledBy` is the
+          client.
+        - `SUPERSEDED_BY_NEW_CHECKOUT`: a newer checkout replaced this pending
+          order. `cancelledBy` is null because no person decided it, it was
+          never paid, and it is excluded from the customer's own history.
+
+    PaymentMethod:
+      type: string
+      enum: [PAYMENT_LINK, PAYMENT_INTENT]
+
+    OrderItem:
+      type: object
+      required: [id, productId, skuId, productName, skuCode, size, color, unitPrice, quantity, lineTotal]
+      description: |
+        A frozen snapshot taken at checkout. Every descriptive field is a copy,
+        not a lookup, so a later price change or a retirement cannot rewrite
+        what the customer bought.
+      properties:
+        id: { type: string, format: uuid }
+        productId:
+          type: string
+          format: uuid
+          description: |
+            Always present. Products are never hard-deleted and the foreign key
+            is `RESTRICT`, so this cannot become null.
+        skuId: { type: string, format: uuid }
+        productName: { type: string }
+        skuCode: { type: string }
+        size: { type: string }
+        color: { type: string }
+        unitPrice: { $ref: '#/components/schemas/Money' }
+        quantity: { type: integer, minimum: 1 }
+        lineTotal: { $ref: '#/components/schemas/Money' }
+
+    Order:
+      type: object
+      required:
+        - id
+        - clientId
+        - status
+        - paymentMethod
+        - subtotalAmount
+        - discountAmount
+        - totalAmount
+        - itemCount
+        - createdAt
+        - paidAt
+        - cancelledAt
+        - cancellationReason
+      properties:
+        id: { type: string, format: uuid }
+        clientId:
+          type: string
+          format: uuid
+          description: Needed by the manager and delivery listings, which span clients.
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        paymentMethod: { $ref: '#/components/schemas/PaymentMethod' }
+        subtotalAmount: { $ref: '#/components/schemas/Money' }
+        discountAmount: { $ref: '#/components/schemas/Money' }
+        totalAmount: { $ref: '#/components/schemas/Money' }
+        itemCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        paidAt: { type: [string, 'null'], format: date-time }
+        cancelledAt: { type: [string, 'null'], format: date-time }
+        cancellationReason:
+          oneOf:
+            - { $ref: '#/components/schemas/CancellationReason' }
+            - { type: 'null' }
+          description: Null unless `cancelledAt` is set.
+        cancelledBy:
+          type: [string, 'null']
+          format: uuid
+          description: Null on `SUPERSEDED_BY_NEW_CHECKOUT`, since no person decided it.
+
+    OrderStatusChange:
+      type: object
+      required: [fromStatus, toStatus, changedBy, reasonCode, reason, createdAt]
+      properties:
+        fromStatus:
+          oneOf:
+            - { $ref: '#/components/schemas/OrderStatus' }
+            - { type: 'null' }
+          description: Null on the first entry, when the order was created.
+        toStatus: { $ref: '#/components/schemas/OrderStatus' }
+        changedBy:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            Null when the system acted: a payment webhook, or a checkout
+            superseding a pending order.
+        reasonCode:
+          oneOf:
+            - { $ref: '#/components/schemas/CancellationReason' }
+            - { type: 'null' }
+          description: |
+            Set on transitions to `CANCELLED`, null otherwise, so a timeline can
+            render "replaced by a newer checkout" differently from "you
+            cancelled this".
+        reason: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    OrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/Order'
+        - type: object
+          required: [items, statusHistory]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/OrderItem' }
+            promoCode:
+              type: [string, 'null']
+              description: The code as it was at checkout, frozen alongside the lines.
+            promoRedemptionVoidedAt:
+              type: [string, 'null']
+              format: date-time
+              description: |
+                Set when the order was cancelled after payment and its promo use
+                was returned to the pool.
+            deliveryPersonId: { type: [string, 'null'], format: uuid }
+            statusHistory:
+              type: array
+              items: { $ref: '#/components/schemas/OrderStatusChange' }
+
+    # ---- Promo codes ----
+    DiscountType:
+      type: string
+      enum: [PERCENTAGE, FIXED_AMOUNT]
+
+    PromoCode:
+      type: object
+      required: [id, code, discountType, discountValue, minPurchaseAmount, usageLimit, timesUsed, expiresAt, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, maxLength: 50 }
+        discountType: { $ref: '#/components/schemas/DiscountType' }
+        discountValue:
+          $ref: '#/components/schemas/PositiveMoney'
+          description: A percentage (at most 100) or a fixed amount, per `discountType`.
+        minPurchaseAmount:
+          oneOf: [{ $ref: '#/components/schemas/PositiveMoney' }, { type: 'null' }]
+        usageLimit:
+          type: [integer, 'null']
+          description: |
+            Total uses allowed; null means unlimited. Strict: the payment
+            transaction locks the promo code row before counting and inserting,
+            so concurrent payments cannot both take the last use.
+        timesUsed:
+          type: integer
+          description: |
+            Live rows in the redemptions table, not a stored counter. Only
+            confirmed payments count, so a pending or abandoned checkout never
+            consumes a use, and cancelling a paid order gives it back.
+        expiresAt: { type: string, format: date-time }
+        isActive: { type: boolean }
+
+    PromoCodeWrite:
+      type: object
+      required: [code, discountType, discountValue, expiresAt]
+      properties:
+        code: { type: string, maxLength: 50, minLength: 1 }
+        discountType: { $ref: '#/components/schemas/DiscountType' }
+        discountValue: { $ref: '#/components/schemas/PositiveMoney' }
+        minPurchaseAmount:
+          oneOf: [{ $ref: '#/components/schemas/PositiveMoney' }, { type: 'null' }]
+        usageLimit: { type: [integer, 'null'], minimum: 1 }
+        expiresAt: { type: string, format: date-time }
+
+    PromoCodeUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        discountValue: { $ref: '#/components/schemas/PositiveMoney' }
+        minPurchaseAmount:
+          oneOf: [{ $ref: '#/components/schemas/PositiveMoney' }, { type: 'null' }]
+        usageLimit: { type: [integer, 'null'], minimum: 1 }
+        expiresAt: { type: string, format: date-time }
+        isActive: { type: boolean }
+
+    PromoCodeCheck:
+      type: object
+      required: [valid]
+      properties:
+        valid: { type: boolean }
+        discountAmount:
+          oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }]
+        reason:
+          type: [string, 'null']
+          enum: [NOT_FOUND, INACTIVE, EXPIRED, LIMIT_REACHED, BELOW_MINIMUM, null]
