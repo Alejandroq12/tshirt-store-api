@@ -1050,7 +1050,8 @@ paths:
         them. `chk_orders_superseded_never_paid` guarantees such a row can never
         have been paid, so this exclusion can never hide a real purchase.
 
-        Pass `status` explicitly to see other states.
+        `status` filters within the orders this endpoint already returns; it never
+        widens the set.
       operationId: listMyOrders
       parameters:
         - { $ref: '#/components/parameters/Limit' }
@@ -1065,7 +1066,7 @@ paths:
           schema: { type: string, format: date }
         - name: status
           in: query
-          description: Repeat for several. Overrides the paid-only default.
+          description: Repeat for several. Filters within paid orders.
           schema:
             type: array
             items: { $ref: '#/components/schemas/OrderStatus' }
@@ -2039,7 +2040,7 @@ components:
             nothing, this is what a checkout charges precisely when
             `unavailableItemCount` is zero, and a checkout charges nothing at
             all otherwise.
-        itemCount: { type: integer, description: Number of lines, available or not. }
+        itemCount: { type: integer, description: 'Number of lines, available or not.' }
         unavailableItemCount:
           type: integer
           description: |
