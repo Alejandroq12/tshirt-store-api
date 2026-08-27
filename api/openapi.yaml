@@ -7,13 +7,6 @@ info:
     REST API for a T-shirt store covering authentication, catalog, carts,
     orders, payments, and role-based operations for clients and managers.
 
-servers:
-  # Added by API Auto Mocking Plugin
-  - description: SwaggerHub API Auto Mocking
-    url: https://virtserver.swaggerhub.com/quezadarodriguez6org/Store/1.0.0
-  - url: /v1
-    description: Deployment-independent API base path
-
 tags:
   - name: Authentication
     description: >-
