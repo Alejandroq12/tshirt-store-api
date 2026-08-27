@@ -3,31 +3,54 @@ openapi: 3.1.0
 info:
   title: T-Shirt Store API
   version: 1.0.0
-  description: |
-    T-Shirt Store API.
-
-    Conventions:
-      - JSON field names use camelCase.
-      - IDs are UUIDs.
-      - Timestamps are RFC 3339 date-time strings.
-      - Monetary amounts are decimal(10,2) strings with exactly two fraction digits.
-      - Error bodies use application/problem+json.
+  description: >-
+    REST API for a T-shirt store covering authentication, catalog, carts,
+    orders, payments, and role-based operations for clients and managers.
 
 servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/quezadarodriguez6org/Store/1.0.0
   - url: /v1
     description: Deployment-independent API base path
 
 tags:
   - name: Authentication
+    description: >-
+      Sign-up, sign-in, sign-out, access-token refresh, and the forgotten-password
+      and authenticated-change password flows.
   - name: Products
+    description: >-
+      Catalogue reads for anonymous visitors and clients, plus manager creation
+      and lifecycle updates.
   - name: SKUs
+    description: >-
+      Purchasable variants of a product, distinguished by size and color, each
+      carrying its own price and stock.
   - name: Images
+    description: >-
+      Product-owned image assets, optionally shared by the SKUs that look the same.
   - name: Likes
+    description: >-
+      The current client's liked state for a product, set and cleared through one
+      idempotent operation.
   - name: Cart
+    description: >-
+      The signed-in client's own cart and the items in it. Nothing here reserves
+      stock.
   - name: Checkout
+    description: >-
+      Snapshotting the current cart into a pending order.
   - name: Orders
+    description: >-
+      Reading order history and moving an order through its status flow.
   - name: Payments
+    description: >-
+      Stripe Payment Intents for cart checkout and Payment Links for single-SKU
+      purchases.
   - name: Webhooks
+    description: >-
+      Inbound Stripe events that mark orders paid and adjust stock.
 
 paths:
   /auth/sign-up:
@@ -68,7 +91,11 @@ paths:
                   lastName: Rivera
                   role: client
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: Email is already registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ConflictProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -133,9 +160,8 @@ paths:
       tags: [Authentication]
       summary: Refresh the access token
       description: |
-        The refresh token is not rotated. It remains valid until it expires or
-        its session is revoked by logout, a password change, or a password
-        reset.
+        The refresh token remains valid until it expires or its session is
+        revoked. This operation returns a new access token only.
       operationId: refreshAccessToken
       x-requirement: Mentor feedback - access-token refresh
       x-contract-status: ready-to-implement
@@ -168,6 +194,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Request a password-reset email
+      description: Returns 202 whether or not the email belongs to a user.
       operationId: forgotPassword
       x-requirement: Authentication - forgot password; rate limit reset flow
       x-contract-status: ready-to-implement
@@ -214,7 +241,11 @@ paths:
         '204':
           description: Password reset and notification queued; no response body
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Reset token is invalid, expired, or already used
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BadRequestProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
         '429':
@@ -247,7 +278,11 @@ paths:
         '204':
           description: Password changed and notification queued; no response body
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Current password is incorrect
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BadRequestProblem'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -258,11 +293,9 @@ paths:
       tags: [Products]
       summary: List products with category filtering and pagination
       description: |
-        Anonymous users and clients receive active products. Managers receive
-        products in every lifecycle state through this same route. Categories
-        are seeded and `category` matches one exact slug; an unknown slug
-        returns an empty page. Results are ordered by createdAt descending and
-        then id descending, so offset pagination is deterministic.
+        Anonymous users and clients receive active products; managers receive
+        every lifecycle state. `category` matches one exact seeded slug; an
+        unknown slug returns an empty page. Results use `createdAt DESC, id DESC`.
       operationId: listProducts
       x-requirement: Paginated product list; search by category; Manager reads all products
       x-contract-status: ready-to-implement
@@ -292,7 +325,7 @@ paths:
                     description: Cotton crew-neck shirt.
                     status: active
                     primaryImageUrl: https://cdn.example.com/products/classic-crew/front.jpg
-                    liked: false
+                    liked: null
                 pagination:
                   limit: 20
                   offset: 0
@@ -331,6 +364,8 @@ paths:
             Location:
               schema:
                 type: string
+                format: uri-reference
+                example: /v1/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2
               description: URL of the created product
           content:
             application/json:
@@ -354,7 +389,7 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/NotFoundProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -365,9 +400,8 @@ paths:
       tags: [Products]
       summary: Get product details
       description: |
-        Anonymous users and clients can read active products. Managers can read
-        any state. Image assets are returned once; each SKU references its
-        resolved image IDs.
+        Anonymous users and clients can read active products; managers can read
+        any state. Images are returned once and referenced by each SKU.
       operationId: getProduct
       x-requirement: Public product details including images; SKU catalog
       x-contract-status: ready-to-implement
@@ -442,7 +476,7 @@ paths:
                       - dddddddd-dddd-4ddd-8ddd-ddddddddddd2
                     primaryImageId: dddddddd-dddd-4ddd-8ddd-ddddddddddd2
                     imageSource: sku
-                liked: true
+                liked: null
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -454,11 +488,9 @@ paths:
       tags: [Products]
       summary: Update product fields or lifecycle state
       description: |
-        inactive is reversible. retired is permanent and retained in storage.
-        No product is physically deleted. Retired products keep accepting field
-        updates, but their status is terminal. Activating a product requires a
-        usable product fallback primary image, so the required low-stock email
-        always has an image to include.
+        `inactive` is reversible; `retired` is terminal and retained. Products
+        are never physically deleted. Activation requires a usable fallback
+        primary image.
       operationId: updateProduct
       x-requirement: Manager updates, disables, reactivates, or retires products
       x-contract-status: ready-to-implement
@@ -496,11 +528,13 @@ paths:
         '404':
           $ref: '#/components/responses/ProductOrCategoryNotFound'
         '409':
-          description: Retired products cannot be reactivated, or the product has no usable primary image to activate with
+          description: >
+            Requested activation targets a retired product or lacks a usable
+            primary image
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/ConflictProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -509,11 +543,9 @@ paths:
       tags: [SKUs]
       summary: Create a SKU
       description: |
-        productId is supplied in the request and must identify an existing
-        product. skuCode is supplied by the manager and is unique across the
-        store, and one product cannot repeat a size and color pair. A SKU has
-        no lifecycle state of its own: it is purchasable while its parent
-        product is active and its stockQuantity is above zero.
+        `productId` must identify an existing product. `skuCode` is globally
+        unique, and a product cannot repeat a size/color combination. A SKU is
+        purchasable while its product is active and stock is available.
       operationId: createSku
       x-requirement: Manage product SKUs and variants
       x-contract-status: ready-to-implement
@@ -540,6 +572,8 @@ paths:
             Location:
               schema:
                 type: string
+                format: uri-reference
+                example: /v1/skus/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3
               description: URL of the created SKU
           content:
             application/json:
@@ -565,13 +599,13 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/NotFoundProblem'
         '409':
-          description: skuCode is already used, or the product already has that size and color
+          description: '`skuCode` is already used, or the size/color combination already exists'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/ConflictProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -582,10 +616,8 @@ paths:
       tags: [SKUs]
       summary: Get SKU details with resolved images
       description: |
-        SKU-specific images are returned when associated. Otherwise the
-        product fallback images are returned. Anonymous users and Clients can
-        read a SKU only when its parent Product is active; Managers can read it
-        for a Product in any lifecycle state.
+        Returns SKU-specific images or product fallback images. Anonymous users
+        and clients require an active product; managers can read any state.
       operationId: getSku
       x-requirement: Variant-specific image selection and top-level SKU model
       x-contract-status: ready-to-implement
@@ -674,11 +706,11 @@ paths:
         '404':
           $ref: '#/components/responses/SkuNotFound'
         '409':
-          description: skuCode is already used, or the product already has that size and color
+          description: '`skuCode` is already used, or the size/color combination already exists'
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/ConflictProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -687,13 +719,9 @@ paths:
       tags: [Images]
       summary: Upload a product-owned image
       description: |
-        The file is stored in S3. Omitting skuIds creates a general product
-        fallback image. Supplying skuIds associates one stored image with all
-        listed SKUs. Every listed SKU must belong to the path product.
-        Accepted media types are image/jpeg, image/png and image/webp, up to
-        5 MB. The returned url is a permanent public URL, because product
-        images are readable by anonymous visitors. Associations are created
-        only here; there is no later reassignment or deletion operation.
+        Omit `skuIds` for a product fallback image, or supply product-owned SKU
+        IDs for a shared variant image. Accepts JPEG, PNG, or WebP up to 5 MB.
+        The response returns the stored public URL and created associations.
       operationId: uploadProductImage
       x-requirement: Manager uploads images per product; variant-specific images
       x-contract-status: ready-to-implement
@@ -705,9 +733,8 @@ paths:
       requestBody:
         required: true
         description: |
-          Send skuIds as repeated multipart fields. For example, an HTTP client
-          or curl request sends one binary `file` part, one `skuIds` part per
-          associated SKU, and one Boolean `primary` part.
+          Send one `file` part, repeated `skuIds` parts when applicable, and an
+          optional `primary` Boolean.
         content:
           multipart/form-data:
             schema:
@@ -738,23 +765,23 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Product does not exist, or a supplied SKU is not found under that Product
+          description: Product does not exist, or a supplied SKU does not belong to it
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/NotFoundProblem'
         '413':
-          description: File exceeds the configured upload limit
+          description: File exceeds 5 MB
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/PayloadTooLargeProblem'
         '415':
-          description: File media type is not configured as supported
+          description: File is not JPEG, PNG, or WebP
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/UnsupportedMediaTypeProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -842,9 +869,8 @@ paths:
       tags: [Cart]
       summary: Add a SKU to the current client's cart
       description: |
-        If the SKU already has a cart item, use PATCH on that item. Cart
-        mutation does not reserve or validate stock; the required stock check
-        occurs before Payment Intent creation.
+        A duplicate SKU returns 409; use the item PATCH to change its quantity.
+        Cart changes do not reserve stock.
       operationId: addCartItem
       x-requirement: Client adds products to own cart
       x-contract-status: ready-to-implement
@@ -889,7 +915,7 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/ConflictProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -966,12 +992,8 @@ paths:
       tags: [Orders]
       summary: List the current client's order history
       description: |
-        Every order belonging to the client is returned, including pending
-        and cancelled ones. Date filters apply to createdAt and price filters
-        apply to totalAmount. Filters are inclusive. When both bounds are
-        supplied, from must not be after to and minPrice must not exceed
-        maxPrice; invalid ranges return 422. Results are ordered by createdAt
-        descending and then id descending.
+        Includes every owned status. Date and price bounds are inclusive;
+        invalid ranges return 422. Results use `createdAt DESC, id DESC`.
       operationId: listMyOrders
       x-requirement: Order history filters and pagination
       x-contract-status: ready-to-implement
@@ -1032,11 +1054,9 @@ paths:
       tags: [Checkout]
       summary: Create a pending order from the current cart
       description: |
-        The response is the order state immediately after creation. Product,
-        SKU, quantity, and price fields are snapshotted from the cart. No
-        Payment Intent, payment, stock change, or cart change has occurred yet.
-        A client has at most one pending order at a time, so a second call
-        before paying or cancelling the first one is rejected.
+        Snapshots the cart into a pending Payment Intent order. It does not
+        create payment, change stock, or change the cart. Only one pending order
+        is allowed per client.
       operationId: createOrderFromCart
       x-requirement: Client buys products and creates own orders
       x-contract-status: ready-to-implement
@@ -1050,6 +1070,8 @@ paths:
             Location:
               schema:
                 type: string
+                format: uri-reference
+                example: /v1/orders/ffffffff-ffff-4fff-8fff-fffffffffff1
               description: URL of the created order
           content:
             application/json:
@@ -1107,8 +1129,7 @@ paths:
       tags: [Orders]
       summary: List all client orders
       description: |
-        Returns a page across all clients. Results are ordered by createdAt
-        descending and then id descending so offset pagination is deterministic.
+        Returns a page across all clients using `createdAt DESC, id DESC`.
       operationId: listOrders
       x-requirement: Manager shows client orders and may view all orders
       x-contract-status: ready-to-implement
@@ -1234,12 +1255,9 @@ paths:
       tags: [Orders]
       summary: Change an order status
       description: |
-        A manager may request processing only from paid, or shipped only from
-        processing. A client may request cancelled only for their own order
-        before shipped. paid is webhook-only. Cancelling an order that was
-        already paid returns the stock reserved by its items to the catalogue;
-        the money is refunded through Stripe outside this API and is not
-        represented by any field here.
+        Managers advance `paid` to `processing` and `processing` to `shipped`.
+        Clients may cancel their own order before `shipped`. `paid` is webhook-only.
+        Cancelling a paid order restores stock; refund data is not returned.
       operationId: updateOrderStatus
       x-requirement: Manager status flow; client cancellation before shipped
       x-contract-status: ready-to-implement
@@ -1296,7 +1314,7 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/ConflictProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
 
@@ -1305,14 +1323,9 @@ paths:
       tags: [Payments]
       summary: Create a Payment Intent for a pending cart order
       description: |
-        The server verifies ownership and pending status, validates that each
-        parent Product remains active and that current SKU stock covers every
-        order item, calculates the order total, and only then asks Stripe to
-        create the Payment Intent. The Stripe idempotency key and the intent
-        metadata both carry the order id, so a retry cannot create a second
-        intent and the webhook can always resolve the order even if this
-        response never reaches the client. The Stripe API version is pinned by
-        deployment configuration.
+        Requires the caller's pending order, active products, and sufficient
+        stock for every item. The amount comes from the stored order. Only one
+        Payment Intent may exist per order.
       operationId: createPaymentIntent
       x-requirement: Payment Intents for cart checkout with stock validation
       x-contract-status: ready-to-implement
@@ -1347,7 +1360,9 @@ paths:
         '404':
           $ref: '#/components/responses/OrderNotFound'
         '409':
-          description: Order is not pending, an item is unavailable, stock is insufficient, or an intent already exists
+          description: >
+            Order is not pending, a product is inactive, stock is insufficient,
+            or a Payment Intent already exists
           content:
             application/problem+json:
               schema:
@@ -1362,12 +1377,8 @@ paths:
       tags: [Payments]
       summary: Generate a shareable Payment Link for one SKU
       description: |
-        This creates a Stripe-hosted link for a fixed SKU and quantity. It
-        does not create an order; the order is created only when the
-        completed-session webhook arrives. The link is reusable and each
-        completed session produces its own order. It is not revoked
-        automatically when its product changes: the webhook revalidates the
-        product at payment time.
+        Creates a reusable hosted link for one SKU whose product is active and
+        for a fixed quantity. No order exists until a paid webhook is processed.
       operationId: createPaymentLink
       x-requirement: Payment Links for single-product purchases
       x-contract-status: ready-to-implement
@@ -1407,7 +1418,7 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/ConflictProblem'
         '422':
           $ref: '#/components/responses/ValidationError'
         '502':
@@ -1418,28 +1429,9 @@ paths:
       tags: [Webhooks]
       summary: Receive Stripe payment events
       description: |
-        The raw request body and Stripe-Signature header are verified before
-        processing. A checkout.session.completed event whose payment_status is
-        paid creates the Payment-Link order and marks it paid in one
-        transaction; the buyer is matched to an existing client by the session
-        email, and an unmatched email leaves the event stored and unprocessed
-        instead of creating an order. For either successful-payment flow, the
-        service locks every affected Product and SKU in a deterministic order
-        and verifies that every order line can be fulfilled. It then decrements
-        every SKU by its full ordered quantity, marks the order paid, reconciles
-        the cart, and records the event as processed in one transaction. If any
-        line lacks stock, none of those mutations is committed and the event is
-        retained as unprocessed with its error. Returning 204 acknowledges that
-        the event was durably received, not that processing completed; an
-        internal reconciliation worker retries stored events whose processed_at
-        is null through the same idempotent handler. Cart reconciliation
-        subtracts the paid quantity from the current row for each ordered SKU,
-        deletes the row only when no quantity remains, and does nothing when the
-        row is no longer present. A Payment Link purchase never changes a cart.
-        After each stock mutation, a low-stock event occurs only when aggregate
-        Product stock crosses from above 3 to 3 or below; a restock crossing
-        back above 3 starts the next notification cycle. Duplicate Stripe event
-        IDs are acknowledged without applying changes twice.
+        Verifies the raw body and `Stripe-Signature`, then processes supported
+        payment events idempotently. A 204 confirms durable receipt; unfinished
+        processing is retried internally.
       operationId: receiveStripeWebhook
       x-requirement: Webhook handling for both Stripe payment methods
       x-contract-status: ready-to-implement
@@ -1464,8 +1456,9 @@ paths:
                 object:
                   id: cs_test_example
                   payment_link: plink_example
-                  client_reference_id: client-reference
                   payment_status: paid
+                  customer_details:
+                    email: ana@example.com
       responses:
         '204':
           description: >
@@ -1476,7 +1469,7 @@ paths:
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                $ref: '#/components/schemas/BadRequestProblem'
 
 components:
   securitySchemes:
@@ -1589,60 +1582,48 @@ components:
         $ref: '#/components/schemas/Amount'
 
   responses:
-    BadRequest:
-      description: Request cannot be processed for the stated operation
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
     Unauthorized:
       description: Authentication credentials are missing or invalid
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/UnauthorizedProblem'
     Forbidden:
       description: The authenticated role is not permitted to perform the operation
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/ForbiddenProblem'
     ProductNotFound:
       description: Product does not exist or is not visible to the caller
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/NotFoundProblem'
     ProductOrCategoryNotFound:
       description: Product or referenced category does not exist
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/NotFoundProblem'
     SkuNotFound:
-      description: SKU does not exist or its parent Product is not visible to the caller
+      description: SKU does not exist or its product is not visible to the caller
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/NotFoundProblem'
     CartItemNotFound:
-      description: Cart item does not exist in the current Client's cart
+      description: Cart item does not exist in the current client's cart
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/NotFoundProblem'
     OrderNotFound:
       description: Order does not exist or is not visible to the caller
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
-    Conflict:
-      description: Current state or uniqueness prevents the operation
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/NotFoundProblem'
     ValidationError:
       description: Request schema validation failed
       content:
@@ -1660,38 +1641,171 @@ components:
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/RateLimitProblem'
     PaymentProviderError:
       description: Stripe did not complete the requested provider operation
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/PaymentProviderProblem'
 
   schemas:
-    Problem:
+    ProblemFields:
       type: object
       required: [type, title, status]
       properties:
         type:
           type: string
           format: uri
-          description: Stable URI identifying the error kind.
+          example: about:blank
+          description: >-
+            Stable URI identifying the error kind. `about:blank` represents
+            the HTTP status itself; documented application URNs distinguish
+            errors that clients must handle differently despite sharing a
+            status code.
         title:
           type: string
+          description: Short, client-safe summary.
         status:
           type: integer
+          minimum: 400
+          maximum: 599
         detail:
           type: string
+          description: Optional client-safe explanation; never contains internal diagnostics.
         instance:
           type: string
+          format: uri-reference
 
-    ValidationProblem:
+    Problem:
+      description: Public error body. Undeclared internal fields are never returned.
+      allOf:
+        - $ref: '#/components/schemas/ProblemFields'
+      unevaluatedProperties: false
+
+    BadRequestProblem:
+      example:
+        type: about:blank
+        title: Bad Request
+        status: 400
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
+          properties:
+            status:
+              const: 400
+
+    UnauthorizedProblem:
+      example:
+        type: about:blank
+        title: Unauthorized
+        status: 401
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            status:
+              const: 401
+
+    ForbiddenProblem:
+      example:
+        type: about:blank
+        title: Forbidden
+        status: 403
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            status:
+              const: 403
+
+    NotFoundProblem:
+      example:
+        type: about:blank
+        title: Not Found
+        status: 404
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            status:
+              const: 404
+
+    ConflictProblem:
+      example:
+        type: about:blank
+        title: Conflict
+        status: 409
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            status:
+              const: 409
+
+    PayloadTooLargeProblem:
+      example:
+        type: about:blank
+        title: Content Too Large
+        status: 413
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            status:
+              const: 413
+
+    UnsupportedMediaTypeProblem:
+      example:
+        type: about:blank
+        title: Unsupported Media Type
+        status: 415
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            status:
+              const: 415
+
+    RateLimitProblem:
+      example:
+        type: about:blank
+        title: Too Many Requests
+        status: 429
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            status:
+              const: 429
+
+    PaymentProviderProblem:
+      example:
+        type: about:blank
+        title: Bad Gateway
+        status: 502
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            status:
+              const: 502
+
+    ValidationProblem:
+      example:
+        type: about:blank
+        title: Unprocessable Content
+        status: 422
+        errors:
+          - field: email
+            message: Must be a valid email address.
+      allOf:
+        - $ref: '#/components/schemas/ProblemFields'
+        - type: object
           required: [errors]
           properties:
+            status:
+              const: 422
             errors:
               type: array
               minItems: 1
@@ -1704,10 +1818,11 @@ components:
                     type: string
                   message:
                     type: string
+      unevaluatedProperties: false
 
     EmptyCartProblem:
       allOf:
-        - $ref: '#/components/schemas/Problem'
+        - $ref: '#/components/schemas/ProblemFields'
         - type: object
           properties:
             type:
@@ -1716,10 +1831,11 @@ components:
               const: Cart is empty
             status:
               const: 409
+      unevaluatedProperties: false
 
     PendingOrderExistsProblem:
       allOf:
-        - $ref: '#/components/schemas/Problem'
+        - $ref: '#/components/schemas/ProblemFields'
         - type: object
           properties:
             type:
@@ -1728,12 +1844,19 @@ components:
               const: Pending order already exists
             status:
               const: 409
+      unevaluatedProperties: false
 
     PaymentIntentConflict:
+      example:
+        type: about:blank
+        title: Conflict
+        status: 409
       allOf:
-        - $ref: '#/components/schemas/Problem'
+        - $ref: '#/components/schemas/ProblemFields'
         - type: object
           properties:
+            status:
+              const: 409
             items:
               type: array
               minItems: 1
@@ -1752,6 +1875,7 @@ components:
                   availableQuantity:
                     type: integer
                     minimum: 0
+      unevaluatedProperties: false
 
     Amount:
       type: string
@@ -1766,7 +1890,7 @@ components:
     Currency:
       type: string
       pattern: '^[A-Z]{3}$'
-      description: ISO 4217 currency set by validated deployment configuration.
+      description: Store currency as an ISO 4217 code.
 
     Pagination:
       type: object
@@ -1862,9 +1986,11 @@ components:
         accessToken:
           type: string
           readOnly: true
+          description: Bearer credential returned only to the authenticated caller; do not log it.
         refreshToken:
           type: string
           readOnly: true
+          description: Session credential returned only at sign-up or login; do not log it.
         accessTokenExpiresAt:
           type: string
           format: date-time
@@ -1899,6 +2025,7 @@ components:
         accessToken:
           type: string
           readOnly: true
+          description: Bearer credential returned only to the authenticated caller; do not log it.
         accessTokenExpiresAt:
           type: string
           format: date-time
@@ -1949,7 +2076,7 @@ components:
     LifecycleState:
       type: string
       enum: [active, inactive, retired]
-      description: active is available; inactive is reversible; retired is permanent and retained.
+      description: Active is available; inactive is reversible; retired is permanent and retained.
 
     Category:
       type: object
@@ -1988,7 +2115,7 @@ components:
           type: string
         description:
           type: [string, 'null']
-          description: Always returned; null when the client supplied no description.
+          description: Always returned; null when no description was supplied.
         status:
           $ref: '#/components/schemas/LifecycleState'
         retiredAt:
@@ -2103,7 +2230,7 @@ components:
           type: string
           format: uri
           readOnly: true
-          description: Generated after S3 storage succeeds; never supplied or changed by clients.
+          description: Generated after upload succeeds; clients cannot supply or change it.
         skuIds:
           type: array
           readOnly: true
@@ -2144,9 +2271,8 @@ components:
           type: boolean
           default: false
           description: |
-            Applies to the product fallback when skuIds is empty, or to every
-            listed SKU. The first image in an applicable set becomes primary
-            even when false; true replaces the previous primary for that set.
+            Applies to the product fallback or every listed SKU. The first image
+            becomes primary automatically; true replaces an existing primary.
 
     SkuFields:
       type: object
@@ -2409,7 +2535,6 @@ components:
         quantity:
           type: integer
           minimum: 1
-          description: Must keep the resulting line and cart subtotal within Amount range.
         unitPrice:
           allOf:
             - $ref: '#/components/schemas/PositiveAmount'
@@ -2455,7 +2580,6 @@ components:
         quantity:
           type: integer
           minimum: 1
-          description: Must keep the resulting line and cart subtotal within Amount range.
 
     CartItemUpdate:
       type: object
@@ -2465,7 +2589,6 @@ components:
         quantity:
           type: integer
           minimum: 1
-          description: Must keep the resulting line and cart subtotal within Amount range.
 
     OrderStatus:
       type: string
@@ -2632,7 +2755,9 @@ components:
         clientSecret:
           type: string
           readOnly: true
-          description: Returned only to the client that owns the order.
+          description: >
+            Sensitive confirmation credential returned only to the order owner;
+            do not log it.
         amount:
           allOf:
             - $ref: '#/components/schemas/PositiveAmount'
@@ -2651,7 +2776,6 @@ components:
         quantity:
           type: integer
           minimum: 1
-          description: Must keep the fixed-quantity link total within Amount range.
 
     PaymentLink:
       type: object
