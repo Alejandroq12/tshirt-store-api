@@ -1,0 +1,554 @@
+Project tshirt_store_api {
+  database_type: 'PostgreSQL'
+  Note: '''
+    Defines the database structure and relationships.
+
+    CHECK constraints, delete guards, and PostgreSQL indexes are in `constraints.sql`.
+    API behavior is defined in `api/openapi.yaml`.
+    Lifecycle rules are in `data-lifecycle.md`.
+  '''
+}
+
+Enum UserRole {
+  MANAGER
+  CLIENT
+}
+
+Enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  CANCELLED
+}
+
+Enum PaymentMethod {
+  PAYMENT_LINK
+  PAYMENT_INTENT
+}
+
+// ============================================================ Auth
+
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  email varchar(255) [unique, not null]
+  password_hash varchar(255) [not null]
+  first_name varchar(100) [not null]
+  last_name varchar(100) [not null]
+  role UserRole [not null, default: 'CLIENT']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    role [name: 'idx_users_role']
+  }
+
+  Note: '''
+    Orders and payment links reference users with RESTRICT.
+    No account lifecycle or deactivation state is added because none is required.
+
+    CHECK chk_users_email_lower in constraints.sql.
+  '''
+}
+
+Table sessions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  refresh_token_hash varchar(255) [unique, not null]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, revoked_at) [name: 'idx_sessions_active']
+  }
+
+  Note: '''
+    One row represents one authenticated session.
+    A row is created at sign-up or sign-in and revoked at sign-out.
+
+    The refresh response returns only a new access token, so this row's
+    refresh token is not rotated. A password change or a password reset revokes
+    every session belonging to that user.
+
+    Revocation sets `revoked_at` instead of deleting the session.
+
+    Partial index idx_sessions_live in constraints.sql.
+  '''
+}
+
+Table password_reset_tokens {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  token_hash varchar(255) [unique, not null]
+  expires_at timestamptz [not null]
+  used_at timestamptz
+  requested_ip varchar(45)
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, created_at) [name: 'idx_reset_ratelimit']
+  }
+
+  Note: 'Reset tokens are single use. A successful reset revokes every session belonging to that user.'
+}
+
+
+// ========================================================= Catalogue
+
+Table categories {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(100) [unique, not null]
+  slug varchar(120) [unique, not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: 'Seeded. RESTRICT prevents deleting a category that is used by a product.'
+}
+
+Table products {
+  id uuid [pk, default: `gen_random_uuid()`]
+  category_id uuid [not null]
+  name varchar(200) [not null]
+  description text
+  is_active boolean [not null, default: false]
+  low_stock_cycle int [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  Indexes {
+    category_id [name: 'idx_products_category']
+    (deleted_at, is_active, created_at) [name: 'idx_products_state_listing']
+  }
+
+  Note: '''
+    ## Product state
+
+    `is_active = false` is temporary and reversible.
+    `deleted_at` means the product is permanently retired.
+    Retirement also sets is_active=false; chk_products_retired_inactive enforces
+    that a retired row cannot remain active.
+
+    New products start inactive. Activation requires a usable fallback primary
+    image, so the required low-stock email always has an image to include.
+    The API exposes active, inactive, or retired as one derived state.
+
+    Products are never hard-deleted. trg_products_prevent_hard_delete in
+    constraints.sql rejects every physical DELETE, including products that have
+    no dependent rows.
+
+    ## low_stock_cycle
+
+    Low-stock notifications are product-level because likes are product-level.
+    Each stock mutation locks the Product row before its SKU rows and compares
+    aggregate SKU stock before and after the change. A low-stock event is the
+    downward crossing from > 3 to <= 3, including a jump such as 5 to 2.
+    `low_stock_cycle` increments exactly once on the upward crossing from <= 3
+    to > 3, so the next downward crossing can notify the same clients again.
+    CHECK chk_products_low_stock_cycle prevents a negative cycle value.
+
+    idx_products_state_listing supports the role-aware product listing.
+    Partial index idx_products_live in constraints.sql supports the public catalogue.
+  '''
+}
+
+Table product_images {
+  id uuid [pk, default: `gen_random_uuid()`]
+  product_id uuid [not null]
+  url varchar(500) [not null]
+  s3_key varchar(500) [not null]
+  is_fallback boolean [not null]
+  is_product_primary boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (product_id, id) [unique, name: 'uq_product_image_parent']
+    (product_id, is_product_primary) [name: 'idx_images_product_primary']
+  }
+
+  Note: '''
+    One row is one product-owned S3 asset. is_fallback=true is created only when
+    the upload has no skuIds; it has no sku_image_assignments. A non-fallback
+    row is assigned to one or more SKUs, so visually identical size variants
+    reuse the same asset. The upload transaction enforces the cross-table scope
+    rule.
+
+    `s3_key` is stored separately so the S3 object can be deleted directly.
+
+    The retained API has no image-deletion operation. Order items do not store
+    image URLs. CHECK chk_images_primary_scope and partial index
+    uq_one_product_primary_image are in constraints.sql.
+  '''
+}
+
+Table product_skus {
+  id uuid [pk, default: `gen_random_uuid()`]
+  product_id uuid [not null]
+  sku_code varchar(64) [not null]
+  size varchar(20) [not null]
+  color varchar(40) [not null]
+  price decimal(10,2) [not null]
+  stock_quantity int [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    product_id [name: 'idx_skus_product']
+    (product_id, id) [unique, name: 'uq_sku_parent']
+    sku_code [unique, name: 'uq_skus_code']
+    (product_id, size, color) [unique, name: 'uq_sku_variant']
+  }
+
+  Note: '''
+    sku_code is supplied by a manager. Orders identify variants by sku_id, not
+    sku_code.
+
+    sku_code is unique across the store, and one product cannot repeat a size
+    and color pair. A SKU has no lifecycle state of its own: it is purchasable
+    while its product is active and its stock is above zero.
+
+    ## Stock
+
+    This version stores the current stock quantity, not stock movement history.
+    CHECK chk_skus_stock prevents stock from becoming negative. A paid order
+    locks every affected Product and SKU in stable ID order, validates every
+    line, and decrements all ordered quantities in one transaction. Partial
+    fulfillment is forbidden: one insufficient SKU commits no stock, order,
+    cart, cycle, or processed-event mutation.
+
+    uq_skus_code keeps sku_code unique across the store and uq_sku_variant
+    keeps one size and color pair per product.
+
+    Partial index idx_skus_purchasable and CHECKs chk_skus_price,
+    chk_skus_stock are in constraints.sql.
+  '''
+}
+
+Table sku_image_assignments {
+  product_id uuid [not null]
+  sku_id uuid [not null]
+  image_id uuid [not null]
+  is_primary boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (sku_id, image_id) [pk, name: 'pk_sku_image_assignment']
+    (product_id, sku_id) [name: 'idx_sku_image_sku_parent']
+    (product_id, image_id) [name: 'idx_sku_image_asset_parent']
+  }
+
+  Note: '''
+    Associates one product-owned image with one or more SKUs. product_id is
+    repeated so composite foreign keys guarantee that the SKU and image belong
+    to the same product. Partial index uq_one_sku_primary_image allows at most
+    one primary image per SKU.
+  '''
+}
+
+Table product_likes {
+  client_id uuid [not null]
+  product_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (client_id, product_id) [pk, name: 'pk_product_like']
+    product_id [name: 'idx_likes_product']
+  }
+
+  Note: 'Internal row presence represents liked=true; absence represents liked=false.'
+}
+
+// ========================================================== Shopping
+
+Table carts {
+  id uuid [pk, default: `gen_random_uuid()`]
+  client_id uuid [unique, not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Note: '''
+    One cart per client. It is created on first use and never deleted.
+
+    The cart does not reserve stock. Emptying it is an explicit customer action.
+    A successful Payment Intent only subtracts each paid quantity from its
+    matching current row; quantities beyond the order remain in the cart.
+  '''
+}
+
+Table cart_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  cart_id uuid [not null]
+  sku_id uuid [not null]
+  quantity int [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (cart_id, sku_id) [unique, name: 'uq_cart_sku']
+    sku_id [name: 'idx_cart_items_sku']
+  }
+
+  Note: '''
+    ## sku_id
+
+    sku_id uses RESTRICT, so a SKU in a cart cannot be hard-deleted.
+    The retained API has no SKU-delete operation.
+
+    For a successful Payment Intent, the webhook subtracts each frozen order
+    quantity from the current row for the same SKU. It keeps a positive
+    remainder, deletes the row only when no quantity remains, and ignores a
+    missing row. This reconciliation commits atomically with the order and
+    stock changes and never removes more than the paid quantity.
+
+    CHECK chk_cart_quantity in constraints.sql.
+  '''
+}
+
+// ========================================================== Ordering
+
+Table orders {
+  id uuid [pk, default: `gen_random_uuid()`]
+  client_id uuid [not null]
+  status OrderStatus [not null, default: 'PENDING']
+  payment_method PaymentMethod [not null]
+  total_amount decimal(10,2) [not null]
+  payment_link_id uuid
+  stripe_checkout_session_id varchar(255) [unique]
+  stripe_payment_intent_id varchar(255) [unique]
+  paid_at timestamptz
+  cancelled_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (client_id, created_at) [name: 'idx_orders_history']
+    (client_id, status) [name: 'idx_orders_client_status']
+    (client_id, total_amount) [name: 'idx_orders_client_total']
+    status [name: 'idx_orders_status']
+    payment_link_id [name: 'idx_orders_payment_link']
+    }
+
+  Note: '''
+    ## History
+
+    Orders are never deleted. Cancellation is a terminal state.
+
+    ## Payment paths
+
+    PAYMENT_INTENT orders are created as PENDING by POST /orders and become
+    PAID after the payment webhook.
+
+    PAYMENT_LINK orders are not created when the link is generated. The
+    completed-session webhook matches the session email to an existing client,
+    then creates the order and marks it PAID in the same transaction. An
+    unmatched email leaves the event stored and unprocessed.
+
+    A client has at most one PENDING order at a time. Partial unique index
+    uq_one_pending_order in constraints.sql enforces it.
+
+    ## Amounts
+
+    Money uses decimal(10,2) in PostgreSQL and strings in the API.
+    Currency is deployment configuration and is not stored per order.
+
+    Stripe identifiers are BLUEPRINT pending the Stripe workshop.
+
+    Order CHECKs are in constraints.sql.
+  '''
+}
+
+
+Table order_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  order_id uuid [not null]
+  sku_id uuid [not null]
+  product_id uuid [not null]
+  product_name varchar(200) [not null]
+  sku_code varchar(64) [not null]
+  size varchar(20) [not null]
+  color varchar(40) [not null]
+  unit_price decimal(10,2) [not null]
+  quantity int [not null]
+  line_total decimal(10,2) [not null]
+
+  Indexes {
+    (order_id, sku_id) [unique, name: 'uq_order_sku']
+    sku_id [name: 'idx_order_items_sku']
+    product_id [name: 'idx_order_items_product']
+  }
+
+  Note: '''
+    Order items are frozen snapshots of what was purchased.
+    Product or SKU changes do not change old order lines.
+
+    sku_id and product_id are NOT NULL and use RESTRICT.
+    Orders are not edited after creation.
+
+    uq_order_sku keeps one line per SKU in an order.
+
+    CHECKs chk_order_items_line, chk_order_items_quantity,
+    chk_order_items_price are in constraints.sql.
+  '''
+}
+
+// ========================================================== Payments
+
+Table payment_links {
+  id uuid [pk, default: `gen_random_uuid()`]
+  sku_id uuid [not null]
+  quantity int [not null]
+  stripe_payment_link_id varchar(255) [unique, not null]
+  url varchar(500) [not null]
+  created_by uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    created_by [name: 'idx_payment_links_creator']
+    sku_id [name: 'idx_payment_links_sku']
+  }
+
+  Note: '''
+    BLUEPRINT pending the Stripe workshop.
+
+    Each link represents one SKU and a fixed quantity.
+    sku_id uses RESTRICT, so a linked SKU cannot be hard-deleted.
+    A link is not revoked when its product changes; the webhook revalidates
+    the product when the payment completes.
+
+    CHECK chk_payment_links_quantity is in constraints.sql.
+  '''
+}
+
+Table stripe_webhook_events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  stripe_event_id varchar(255) [unique, not null]
+  event_type varchar(100) [not null]
+  order_id uuid
+  payload jsonb [not null]
+  processed_at timestamptz
+  error_message text
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    event_type [name: 'idx_webhook_type']
+    order_id [name: 'idx_webhook_order']
+  }
+
+  Note: '''
+    BLUEPRINT pending the Stripe workshop.
+
+    stripe_event_id is unique so the same Stripe event is not processed twice.
+    The raw payload is stored so failed processing can be retried. A successful
+    payment event is marked processed only in the same transaction that fully
+    decrements every order line and applies the related order, cart, and
+    stock-cycle changes. An insufficient line leaves those mutations
+    uncommitted and records the event error for retry or reconciliation; stock
+    is never partly decremented.
+
+    After the webhook acknowledges durable receipt with 204, a scheduled
+    producer scans processed_at IS NULL and enqueues event IDs. Reconciliation
+    workers claim rows with FOR UPDATE SKIP LOCKED and rerun the same idempotent
+    handler. Partial index idx_webhook_pending in constraints.sql supports the
+    oldest-first scan without indexing completed events.
+
+    order_id is nullable because a Payment Link event can arrive before its
+    order exists.
+  '''
+}
+
+// ===================================================== Notifications
+
+Table stock_notifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  client_id uuid [not null]
+  product_id uuid [not null]
+  low_stock_cycle int [not null]
+  stock_at_send int [not null]
+  sent_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    product_id [name: 'idx_stock_notice_product']
+    (client_id, product_id, low_stock_cycle) [unique, name: 'uq_stock_notice_cycle']
+  }
+
+  Note: '''
+    Records a low-stock email sent to a client for a product. A client has not
+    purchased the product when no order line for any of its SKUs belongs to an
+    order that is paid and not cancelled.
+
+    low_stock_cycle stores products.low_stock_cycle as it was when the email was
+    sent. uq_stock_notice_cycle allows one email per client, product, and cycle.
+    Only an upward aggregate-stock crossing from <= 3 to > 3 increments the
+    cycle and makes a later downward crossing eligible for another email.
+
+    CHECKs chk_stock_notice_amount and chk_stock_notice_cycle are in
+    constraints.sql.
+  '''
+}
+
+// ==================================================== Relationships
+// No foreign key uses SET NULL.
+// CASCADE is used only for dependent rows with no history.
+// RESTRICT protects historical references from hard deletion.
+
+Ref: sessions.user_id > users.id [delete: cascade]
+Ref: password_reset_tokens.user_id > users.id [delete: cascade]
+
+Ref: products.category_id > categories.id [delete: restrict]
+Ref: product_images.product_id > products.id [delete: cascade]
+Ref: product_skus.product_id > products.id [delete: restrict]
+Ref: sku_image_assignments.(product_id, sku_id) > product_skus.(product_id, id) [delete: cascade]
+Ref: sku_image_assignments.(product_id, image_id) > product_images.(product_id, id) [delete: cascade]
+Ref: product_likes.client_id > users.id [delete: cascade]
+Ref: product_likes.product_id > products.id [delete: cascade]
+
+Ref: users.id - carts.client_id [delete: cascade]
+Ref: cart_items.cart_id > carts.id [delete: cascade]
+Ref: cart_items.sku_id > product_skus.id [delete: restrict]
+
+Ref: orders.client_id > users.id [delete: restrict]
+Ref: orders.payment_link_id >? payment_links.id [delete: restrict]
+
+Ref: order_items.order_id > orders.id [delete: cascade]
+Ref: order_items.(product_id, sku_id) > product_skus.(product_id, id) [delete: restrict]
+
+Ref: payment_links.sku_id > product_skus.id [delete: restrict]
+Ref: payment_links.created_by > users.id [delete: restrict]
+Ref: stripe_webhook_events.order_id >? orders.id [delete: restrict]
+
+Ref: stock_notifications.client_id > users.id [delete: cascade]
+Ref: stock_notifications.product_id > products.id [delete: cascade]
+
+TableGroup auth {
+  users
+  sessions
+  password_reset_tokens
+}
+
+TableGroup catalog {
+  categories
+  products
+  product_images
+  product_skus
+  sku_image_assignments
+  product_likes
+}
+
+TableGroup shopping {
+  carts
+  cart_items
+}
+
+TableGroup ordering {
+  orders
+  order_items
+}
+
+TableGroup payments {
+  payment_links
+  stripe_webhook_events
+}
+
+TableGroup notifications {
+  stock_notifications
+}
