@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, and test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: tshirt
+          POSTGRES_PASSWORD: tshirt
+          POSTGRES_DB: tshirt_store_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tshirt -d tshirt_store_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Formatting
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Contract lint
+        run: npm run lint:api
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm run test:ci
+
+      - name: Prepare the end-to-end environment
+        run: cp .env.test.example .env.test
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+  contract-breaking-changes:
+    name: Contract has no breaking change
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract the contract as the base branch has it
+        run: git show "origin/${{ github.base_ref }}:api/openapi.yaml" > "${RUNNER_TEMP}/base-openapi.yaml"
+
+      - name: Compare against the delivered contract
+        run: |
+          docker run --rm \
+            -v "${RUNNER_TEMP}/base-openapi.yaml:/specs/base.yaml:ro" \
+            -v "${GITHUB_WORKSPACE}/api/openapi.yaml:/specs/revision.yaml:ro" \
+            tufin/oasdiff@sha256:6065c16a4c9ce12504752f444d4981091e58c2a35436fac90b649be47d833db3 \
+            breaking /specs/base.yaml /specs/revision.yaml \
+            --format githubactions \
+            --fail-on ERR

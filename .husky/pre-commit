@@ -1,0 +1,12 @@
+# Lint, typecheck and unit tests before code reaches a branch.
+#
+# Bypassable with --no-verify, so this is a net rather than a lock; CI is the
+# gate that actually blocks. It runs in a few seconds, which is the whole
+# reason it is worth having.
+
+# Formatting is repaired and restaged; lint problems stop the commit rather
+# than being quietly fixed.
+npx lint-staged
+
+npm run typecheck
+npm test

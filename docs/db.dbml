@@ -3,7 +3,9 @@ Project tshirt_store_api {
   Note: '''
     Defines the database structure and relationships.
 
-    CHECK constraints, delete guards, and PostgreSQL indexes are in `constraints.sql`.
+    CHECK constraints, delete guards, and PostgreSQL indexes are in the
+    constraints migration, `prisma/migrations/20260828002527_constraints/migration.sql`.
+    Notes below refer to it by its original name, `constraints.sql`.
     API behavior is defined in `api/openapi.yaml`.
     Lifecycle rules are in `data-lifecycle.md`.
   '''
