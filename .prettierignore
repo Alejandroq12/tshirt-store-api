@@ -1,0 +1,13 @@
+api/openapi.yaml
+
+prisma/migrations/
+
+*.prisma
+
+docs/
+
+node_modules/
+dist/
+coverage/
+.husky/_/
+package-lock.json
