@@ -1,16 +1,17 @@
-# Notas para empezar la API
+# API implementation notes
 
-Apuntes para mí cuando arranque el desarrollo en NestJS. El contrato es
-[../api/openapi.yaml](../api/openapi.yaml) y el modelo es [db.dbml](db.dbml); esto solo recoge
-lo que hay que tener presente al traducirlos a código.
+Notes for starting development in NestJS. The contract is
+[../api/openapi.yaml](../api/openapi.yaml), and the data model is
+[db.dbml](db.dbml). This document only records what must be considered when
+translating them into code.
 
-## 1. Antes de escribir la primera línea
+## 1. Before writing the first line
 
-### El `ValidationPipe` por defecto rompe 24 de mis 28 operaciones
+### NestJS's default `ValidationPipe` breaks 24 of the 28 operations
 
-NestJS responde `400` cuando falla la validación. Mi contrato documenta `422` en
-24 de 28 operaciones. Sin esta configuración, casi todo el contrato queda
-desmentido en la primera petición con payload inválido.
+NestJS returns `400` when validation fails. The contract documents `422` for
+24 of the 28 operations. Without this configuration, almost the entire contract
+is contradicted by the first request with an invalid payload.
 
 ```ts
 app.useGlobalPipes(
@@ -22,118 +23,125 @@ app.useGlobalPipes(
 );
 ```
 
-`forbidNonWhitelisted` no es opcional: 36 de mis schemas declaran
-`additionalProperties: false` y 9 declaran `unevaluatedProperties: false`. Si el
-DTO acepta campos desconocidos, el código es más permisivo que el contrato.
+`forbidNonWhitelisted` is required: 36 schemas declare
+`additionalProperties: false`, and 9 declare
+`unevaluatedProperties: false`. If a DTO accepts unknown fields, the
+implementation is more permissive than the contract.
 
-### `constraints.sql` se aplica como migración manual
+### `constraints.sql` is applied as a migration
 
-Prisma no soporta CHECK constraints, ni índices parciales, ni triggers. Por eso
-viven en [constraints.sql](constraints.sql) y no en el schema:
+Prisma does not support CHECK constraints, partial indexes, or triggers. They
+therefore live in the constraints migration,
+[`prisma/migrations/20260828002527_constraints/migration.sql`](../prisma/migrations/20260828002527_constraints/migration.sql),
+rather than the Prisma schema:
 
-| Objeto | Cantidad |
-|---|---|
-| CHECK constraints | 18 |
-| Índices (3 únicos parciales, 4 de apoyo) | 7 |
-| Triggers | 1 |
+| Object                                     | Count |
+| ------------------------------------------ | ----- |
+| CHECK constraints                          | 18    |
+| Indexes (3 partial unique, 4 supporting)   | 7     |
+| Triggers                                   | 1     |
 
-El orden es: aplicar el schema Prisma primero, `constraints.sql` después.
+The directory timestamps guarantee the order: `..._init` first, followed by
+`..._constraints`. `prisma migrate deploy` applies them in that order.
 
-### FKs compuestas en Prisma
+### Composite foreign keys in Prisma
 
-`sku_image_assignments` y `order_items` usan llaves foráneas compuestas. Prisma
-las soporta con `fields: [...]` / `references: [...]`, pero exige un índice único
-del lado referenciado. Ya existen: `uq_sku_parent` y `uq_product_image_parent`
-(ambos sobre `(product_id, id)`). No los quitar del schema.
+`sku_image_assignments` and `order_items` use composite foreign keys. Prisma
+supports them through `fields: [...]` and `references: [...]`, but it requires
+a unique index on the referenced side. The required indexes already exist:
+`uq_sku_parent` and `uq_product_image_parent`, both on `(product_id, id)`.
+Do not remove them from the schema.
 
-## 2. Lo que la base ya garantiza
+## 2. What the database already guarantees
 
-No reimplementar estas reglas en código. Si se violan, PostgreSQL lanza
-excepción; lo que sí hay que hacer es traducir esa excepción al `409` o `422`
-que el contrato documenta.
+Do not reimplement these rules in application code. PostgreSQL raises an error
+when one is violated; the application must translate that error into the `409`
+or `422` documented by the contract.
 
-| Regla | Quién la impone |
-|---|---|
-| Un solo pedido `PENDING` por cliente | `uq_one_pending_order` |
-| `sku_code` único en toda la tienda | `uq_skus_code` |
-| Una sola combinación talla+color por producto | `uq_sku_variant` |
-| Un correo de stock bajo por cliente, producto y ciclo | `uq_stock_notice_cycle` |
-| Un item por SKU en un carrito | `uq_cart_sku` |
-| Una línea por SKU en un pedido | `uq_order_sku` |
-| Una imagen primaria de producto y una por SKU | `uq_one_product_primary_image`, `uq_one_sku_primary_image` |
-| Stock nunca negativo | `chk_skus_stock` |
-| `low_stock_cycle` nunca negativo | `chk_products_low_stock_cycle`, `chk_stock_notice_cycle` |
-| Un producto retirado no puede estar activo | `chk_products_retired_inactive` |
-| `line_total = unit_price * quantity` | `chk_order_items_line` |
-| `paid_at` coherente con el estado del pedido | `chk_orders_paid_at` |
-| Ningún producto se borra físicamente | `trg_products_prevent_hard_delete` |
+| Rule                                                        | Enforced by                                              |
+| ----------------------------------------------------------- | -------------------------------------------------------- |
+| Only one `PENDING` order per client                       | `uq_one_pending_order`                                 |
+| `sku_code` is unique across the store                     | `uq_skus_code`                                         |
+| Only one size-and-color combination per product             | `uq_sku_variant`                                       |
+| One low-stock email per client, product, and cycle          | `uq_stock_notice_cycle`                                |
+| One item per SKU in a cart                                  | `uq_cart_sku`                                          |
+| One line per SKU in an order                                | `uq_order_sku`                                         |
+| One primary product image and one primary image per SKU     | `uq_one_product_primary_image`, `uq_one_sku_primary_image` |
+| Stock is never negative                                     | `chk_skus_stock`                                       |
+| `low_stock_cycle` is never negative                       | `chk_products_low_stock_cycle`, `chk_stock_notice_cycle` |
+| A retired product cannot be active                          | `chk_products_retired_inactive`                        |
+| `line_total = unit_price * quantity`                      | `chk_order_items_line`                                 |
+| `paid_at` is consistent with the order status             | `chk_orders_paid_at`                                   |
+| Products cannot be physically deleted                       | `trg_products_prevent_hard_delete`                     |
 
-Hay 9 operaciones con `409` en el contrato. Cada una corresponde a una de estas
-restricciones o a una transición de estado inválida.
+The contract has nine operations that document `409`. Each corresponds to one
+of these constraints or an invalid state transition.
 
-## 3. Lo que solo garantiza el código
+## 3. What only the application code guarantees
 
-Nada en la base atrapa estos errores. Aquí es donde van a estar los bugs, así
-que esta lista es también mi lista de tests unitarios de la semana 3.
+The database cannot prevent the following errors. This is where bugs are most
+likely, so the list also serves as the unit-test checklist for week 3.
 
-| # | Regla | Qué pasa si se me olvida |
-|---|---|---|
-| 1 | Incrementar `products.low_stock_cycle` cuando el stock total vuelve a subir por encima de 3 | El sistema se comporta como si no existiera el ciclo: un correo por cliente y nunca más |
-| 2 | Detectar el **flanco** de bajada (`> 3` → `<= 3`), no el nivel | Un `if (stock === 3)` se salta el caso 5 → 2, y quedarse en 2 vuelve a encolar correos |
-| 3 | Tomar los locks en orden estable: producto primero, luego sus SKUs por id ascendente | Deadlocks bajo concurrencia (SQLSTATE 40P01) |
-| 4 | Decrementar stock todo-o-nada | Un decremento parcial deja inventario y pedido inconsistentes |
-| 5 | Reconciliar el carrito **restando** la cantidad pagada, no borrando la fila | Un carrito que creció de 2 a 5 pierde 3 unidades que el cliente sí quería |
-| 6 | El worker que reprocesa `stripe_webhook_events WHERE processed_at IS NULL` con `FOR UPDATE SKIP LOCKED` | Un pago con stock insuficiente deja el pedido en `pending` para siempre; Stripe ya recibió el 204 y no reintenta |
-| 7 | Revocar todas las sesiones al cambiar o resetear contraseña | Sesiones viejas siguen vivas tras un evento de seguridad |
-| 8 | Rechazar la activación de un producto sin imagen primaria usable | El correo de stock bajo se queda sin imagen que incluir |
-| 9 | Emparejar al comprador de un Payment Link por el email de la sesión de Stripe | Sin cliente no hay pedido: `orders.client_id` es NOT NULL |
+| # | Rule | Failure if omitted |
+| - | ---- | ------------------ |
+| 1 | Increment `products.low_stock_cycle` when total stock rises above 3 again | The system behaves as if cycles did not exist: one email per client, never another |
+| 2 | Detect the downward threshold crossing (`> 3` → `<= 3`), not merely the current level | `if (stock === 3)` misses 5 → 2, while remaining at 2 queues repeated emails |
+| 3 | Acquire locks in a stable order: product first, then its SKUs by ascending ID | Deadlocks under concurrency (SQLSTATE 40P01) |
+| 4 | Decrement stock atomically | A partial decrement leaves inventory and the order inconsistent |
+| 5 | Reconcile the cart by subtracting the purchased quantity rather than deleting the row | A cart that grew from 2 to 5 loses the 3 units the client still wanted |
+| 6 | Reprocess `stripe_webhook_events WHERE processed_at IS NULL` with `FOR UPDATE SKIP LOCKED` | A payment with insufficient stock leaves the order `pending` forever; Stripe already received the 204 and does not retry |
+| 7 | Revoke every session when a password is changed or reset | Old sessions remain active after a security event |
+| 8 | Reject activation of a product without a usable primary image | The low-stock email has no image to include |
+| 9 | Match a Payment Link buyer through the email on the Stripe session | Without a client there can be no order: `orders.client_id` is NOT NULL |
 
-Test mínimo para la regla 1 y 2, que son las más fáciles de romper:
+Minimum test for rules 1 and 2, which are the easiest to break:
 
 ```
-stock 5 → 2   notifica y registra ciclo 0
-stock 2 → 1   NO notifica (sigue por debajo del umbral)
-stock 1 → 8   incrementa low_stock_cycle a 1
-stock 8 → 3   vuelve a notificar al mismo cliente, ciclo 1
+stock 5 → 2   notify and record cycle 0
+stock 2 → 1   DO NOT notify (still below the threshold)
+stock 1 → 8   increment low_stock_cycle to 1
+stock 8 → 3   notify the same client again, cycle 1
 ```
 
-## 4. Guardrail del contrato
+## 4. Contract guardrail
 
-Para que el YAML no se degrade mientras desarrollo:
+To prevent the YAML contract from degrading during development:
 
 ```json
 "lint:api": "redocly lint api/openapi.yaml"
 ```
 
-Estado al momento de entregar el diseño: válido, 0 errores, 1 advertencia
-(`info-license`, ignorada a propósito).
+Status when the design was delivered: valid, 0 errors, 1 warning
+(`info-license`, intentionally ignored).
 
-## 5. Decisiones mías que debo confirmar con Erick mientras desarrollo
+## 5. Decisions to confirm with Erick during implementation
 
-Ninguna bloquea el arranque, pero todas son interpretación propia y no
-instrucción suya:
+None blocks initial development, but each is my interpretation rather than an
+instruction from Erick:
 
-- **"Delete products" como baja lógica.** `PATCH /products/{id}` con
-  `status: retired`, sin `DELETE`. Le pareció razonable en la reunión pero no lo
-  confirmó como la interpretación definitiva.
-- **Los estados `active` / `inactive` / `retired`.** Solo `inactive` traza
-  directo a un requerimiento ("Disable products").
-- **`retired` es permanente y no reactivable.**
-- **El modelo de imágenes por SKU.** Él pidió resolver la selección por
-  variante; el diseño concreto (`sku_image_assignments` M2M con fallback) es mío.
-- **`GET /manager/products` como el endpoint innecesario.** Él dijo que había
-  uno, nunca lo nombró. Lo quité por trazabilidad propia, no porque lo señalara.
-- **Stripe.** El modelo todavía marca los identificadores como BLUEPRINT
-  pendientes del workshop, mientras el contrato ya describe el flujo completo.
-  Alinear cuando el workshop ocurra.
+- **"Delete products" as a soft deletion.** `PATCH /products/{id}` with
+  `status: retired`, without `DELETE`. He considered it reasonable in the
+  meeting but did not confirm it as the final interpretation.
+- **The `active`, `inactive`, and `retired` statuses.** Only `inactive`
+  maps directly to a requirement ("Disable products").
+- **`retired` is permanent and cannot be reactivated.**
+- **The per-SKU image model.** He asked for image selection by variant; the
+  concrete design (`sku_image_assignments` as many-to-many with fallback) is
+  mine.
+- **`GET /manager/products` as the unnecessary endpoint.** He said one
+  endpoint was unnecessary but never identified it. I removed this one based
+  on my own traceability assessment, not because he named it.
+- **Stripe.** The model still marks its identifiers as BLUEPRINT pending the
+  workshop, while the contract already describes the complete flow. Align them
+  after the workshop.
 
-## 6. Dónde está documentada cada regla
+## 6. Where each rule is documented
 
-| Busco | Archivo |
-|---|---|
-| Rutas, schemas, códigos, ejemplos | [openapi.yaml](../api/openapi.yaml) |
-| Tablas, columnas, relaciones, índices | [db.dbml](db.dbml) |
-| CHECKs, índices parciales, trigger | [constraints.sql](constraints.sql) |
-| Estados, borrados, stock, sesiones, notificaciones | [data-lifecycle.md](data-lifecycle.md) |
-| Flujos internos, locks, cola, monitoreo | [architecture.md](architecture.md) |
-| Qué decidí yo y no viene de un requerimiento | la sección 5 de este archivo |
+| Looking for                                           | File                                                                                                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Routes, schemas, status codes, and examples           | [openapi.yaml](../api/openapi.yaml)                                                                                                         |
+| Tables, columns, relationships, and indexes           | [db.dbml](db.dbml)                                                                                                                          |
+| CHECK constraints, partial indexes, and trigger       | [`prisma/migrations/20260828002527_constraints/migration.sql`](../prisma/migrations/20260828002527_constraints/migration.sql)             |
+| States, deletion, stock, sessions, and notifications  | [data-lifecycle.md](data-lifecycle.md)                                                                                                      |
+| Internal flows, locks, queue, and monitoring          | [architecture.md](architecture.md)                                                                                                          |
+| Decisions made here rather than stated in a requirement | Section 5 of this file                                                                                                                       |
