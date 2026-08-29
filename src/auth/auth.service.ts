@@ -3,13 +3,14 @@ import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { type User, UserRole } from '@prisma/client';
 
 import type { EnvironmentVariables } from '../config/env.validation';
-import { MailService } from '../mail/mail.service';
+import { type EmailMessage, MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthenticatedUser } from './authenticated-user';
 import {
@@ -82,6 +83,7 @@ const userResponse = (user: SessionUser): UserResponse => ({
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly resetTokenTtl: number;
 
   constructor(
@@ -196,11 +198,14 @@ export class AuthService {
       },
     });
 
-    await this.mail.send({
-      to: user.email,
-      subject: 'Reset your password',
-      text: `Reset token: ${token}`,
-    });
+    await this.notify(
+      {
+        to: user.email,
+        subject: 'Reset your password',
+        text: `Reset token: ${token}`,
+      },
+      'password reset',
+    );
   }
 
   async resetPassword(input: ResetPasswordRequest): Promise<void> {
@@ -330,10 +335,24 @@ export class AuthService {
   }
 
   private sendPasswordChanged(email: string): Promise<void> {
-    return this.mail.send({
-      to: email,
-      subject: 'Your password was changed',
-      text: 'Your T-Shirt Store password was changed.',
-    });
+    return this.notify(
+      {
+        to: email,
+        subject: 'Your password was changed',
+        text: 'Your T-Shirt Store password was changed.',
+      },
+      'password change',
+    );
+  }
+
+  private async notify(message: EmailMessage, purpose: string): Promise<void> {
+    try {
+      await this.mail.send(message);
+    } catch (error) {
+      this.logger.error(
+        `${purpose} notification was not delivered`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 }
