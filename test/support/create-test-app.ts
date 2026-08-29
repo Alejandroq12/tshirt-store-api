@@ -3,12 +3,25 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/bootstrap';
+import { MailService } from '../../src/mail/mail.service';
 import { ValidationProbeModule } from './validation-probe.module';
 
-export async function createTestApp(): Promise<INestApplication> {
-  const moduleFixture: TestingModule = await Test.createTestingModule({
+interface TestAppOverrides {
+  mail?: Pick<MailService, 'send'>;
+}
+
+export async function createTestApp(
+  overrides: TestAppOverrides = {},
+): Promise<INestApplication> {
+  const builder = Test.createTestingModule({
     imports: [AppModule, ValidationProbeModule],
-  }).compile();
+  });
+
+  if (overrides.mail) {
+    builder.overrideProvider(MailService).useValue(overrides.mail);
+  }
+
+  const moduleFixture: TestingModule = await builder.compile();
 
   const app = moduleFixture.createNestApplication({ rawBody: true });
   configureApp(app);

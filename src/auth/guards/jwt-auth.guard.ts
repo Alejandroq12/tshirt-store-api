@@ -9,6 +9,7 @@ import type { Request } from 'express';
 
 import { IS_OPTIONAL_AUTH } from '../decorators/optional-auth.decorator';
 import { IS_PUBLIC } from '../decorators/public.decorator';
+import { AuthService } from '../auth.service';
 import { TokenService } from '../token.service';
 
 const bearerToken = (request: Request): string | undefined => {
@@ -27,6 +28,7 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly tokens: TokenService,
+    private readonly auth: AuthService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -51,7 +53,13 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const claims = await this.tokens.verifyAccessToken(token);
-    request.user = { id: claims.sub, role: claims.role, sessionId: claims.sid };
+    const user = { id: claims.sub, role: claims.role, sessionId: claims.sid };
+
+    if (!(await this.auth.isSessionActive(user))) {
+      throw new UnauthorizedException();
+    }
+
+    request.user = user;
 
     return true;
   }
