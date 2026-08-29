@@ -8,6 +8,7 @@ import { MailModule } from './mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { RateLimitModule } from './security/rate-limit.module';
+import { SkusModule } from './skus/skus.module';
 import { StorageModule } from './storage/storage.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { StorageModule } from './storage/storage.module';
     AuthModule,
     AuthorizationModule,
     ProductsModule,
+    SkusModule,
     RateLimitModule,
     StorageModule,
     MailModule,
