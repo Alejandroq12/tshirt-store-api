@@ -33,9 +33,10 @@ email jobs.
 - Payments owns Stripe Payment Links, Payment Intents, and webhook
   reconciliation.
 
-Controllers apply CASL guards. Managers may manage products/SKUs and view all
-orders. Clients may read catalog data, set their own likes, manage their own
-cart, create/view their own orders, and cancel their own unshipped orders.
+Controllers apply CASL guards. Managers may manage products, SKUs, and images
+and view all orders. Clients may read catalog data, set their own likes, manage
+their own cart, create/view their own orders, and cancel their own unshipped
+orders.
 
 ## Required implementation controls
 
