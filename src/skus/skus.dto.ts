@@ -1,6 +1,5 @@
 import {
   IsInt,
-  IsOptional,
   IsString,
   IsUUID,
   Matches,
@@ -8,6 +7,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+
+import { OptionalProperty } from '../common/validation/optional-property.decorator';
 
 const POSITIVE_AMOUNT = /^(?!0\.00$)(0|[1-9]\d{0,7})\.\d{2}$/;
 
@@ -45,30 +46,30 @@ export class CreateSkuRequest {
 }
 
 export class UpdateSkuRequest {
-  @IsOptional()
+  @OptionalProperty()
   @IsString()
   @MinLength(1)
   @MaxLength(64)
   skuCode?: string;
 
-  @IsOptional()
+  @OptionalProperty()
   @IsString()
   @MinLength(1)
   @MaxLength(20)
   size?: string;
 
-  @IsOptional()
+  @OptionalProperty()
   @IsString()
   @MinLength(1)
   @MaxLength(40)
   color?: string;
 
-  @IsOptional()
+  @OptionalProperty()
   @IsString()
   @Matches(POSITIVE_AMOUNT)
   price?: string;
 
-  @IsOptional()
+  @OptionalProperty()
   @IsInt()
   @Min(0)
   stockQuantity?: number;

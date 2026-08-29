@@ -354,6 +354,25 @@ describe('SKUs (e2e)', () => {
     expect(resolvedFallback.imageSource).toBe('product');
   });
 
+  it('rejects null for an optional but non-nullable SKU field', async () => {
+    const category = await createCategory();
+    const product = await createProduct(category.id);
+    const sku = await createSku(product.id);
+    const manager = await login('MANAGER');
+
+    const response = await request(app.getHttpServer())
+      .patch(`/v1/skus/${sku.id}`)
+      .set('Authorization', `Bearer ${manager.accessToken}`)
+      .send({ price: null })
+      .expect(422);
+
+    expect(
+      (response.body as { errors: Array<{ field: string }> }).errors.map(
+        ({ field }) => field,
+      ),
+    ).toContain('price');
+  });
+
   it('allows only managers to update fields and surfaces unique conflicts', async () => {
     const category = await createCategory();
     const product = await createProduct(category.id);
