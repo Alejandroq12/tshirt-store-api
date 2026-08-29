@@ -3,7 +3,10 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 
 import { TokenService } from '../src/auth/token.service';
+import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
+import { truncateAll } from './support/database';
+import { createClient } from './support/fixtures';
 
 const PROBLEM_KEYS = ['type', 'title', 'status', 'detail', 'instance'];
 
@@ -128,13 +131,20 @@ describe('HTTP contract (e2e)', () => {
 describe('Authentication guard (e2e)', () => {
   let app: INestApplication<App>;
   let tokens: TokenService;
+  let prisma: PrismaService;
 
   beforeAll(async () => {
     app = (await createTestApp()) as INestApplication<App>;
     tokens = app.get(TokenService);
+    prisma = app.get(PrismaService);
+  });
+
+  beforeEach(async () => {
+    await truncateAll(prisma);
   });
 
   afterAll(async () => {
+    await truncateAll(prisma);
     await app.close();
   });
 
@@ -154,10 +164,18 @@ describe('Authentication guard (e2e)', () => {
   });
 
   it('resolves the caller from a valid access token', async () => {
+    const user = await createClient(prisma);
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        refreshTokenHash: 'guard-test-refresh-hash',
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
     const { token } = await tokens.issueAccessToken({
-      id: '11111111-1111-4111-8111-111111111111',
-      role: 'CLIENT',
-      sessionId: '22222222-2222-4222-8222-222222222222',
+      id: user.id,
+      role: user.role,
+      sessionId: session.id,
     });
 
     const response = await guarded()
@@ -165,9 +183,9 @@ describe('Authentication guard (e2e)', () => {
       .expect(200);
 
     expect(response.body).toEqual({
-      id: '11111111-1111-4111-8111-111111111111',
+      id: user.id,
       role: 'CLIENT',
-      sessionId: '22222222-2222-4222-8222-222222222222',
+      sessionId: session.id,
     });
   });
 
