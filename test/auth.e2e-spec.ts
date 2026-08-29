@@ -8,6 +8,7 @@ import { SecretTokenService } from '../src/auth/secret-token.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';
+import { resetRateLimit } from './support/rate-limit';
 import { createManager, KNOWN_PASSWORD } from './support/fixtures';
 
 interface AuthSessionBody {
@@ -59,6 +60,7 @@ describe('Authentication (e2e)', () => {
   beforeEach(async () => {
     sendMail.mockReset().mockResolvedValue(undefined);
     await truncateAll(prisma);
+    resetRateLimit(app);
   });
 
   afterAll(async () => {
@@ -395,6 +397,10 @@ describe('Password-reset rate limit (e2e)', () => {
     await truncateAll(prisma);
   });
 
+  beforeEach(() => {
+    resetRateLimit(app);
+  });
+
   afterAll(async () => {
     await truncateAll(prisma);
     await app.close();
@@ -426,5 +432,21 @@ describe('Password-reset rate limit (e2e)', () => {
       .post('/v1/auth/reset-password')
       .send({})
       .expect(429);
+  });
+
+  it('clears an exhausted in-memory quota', async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app.getHttpServer())
+        .post('/v1/auth/forgot-password')
+        .send({ email: 'unknown@example.com' })
+        .expect(202);
+    }
+
+    resetRateLimit(app);
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/forgot-password')
+      .send({ email: 'unknown@example.com' })
+      .expect(202);
   });
 });
