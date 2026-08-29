@@ -164,16 +164,17 @@ Built:
 - Environment schema validation that fails the boot with a readable error
 - The global exception filter, the validation pipe, and the `/v1` prefix
 - Helmet, CORS, and a rate limit on the password-reset flow
-- JWT issuing and verification, password hashing, and the global auth guard
-- The CASL ability factory and guard wiring — with no rules in them
-- The S3 upload primitive and the SMTP transport
+- All seven authentication operations, including session revocation and email
+- Product and SKU catalog operations, including public reads
+- Product fallback and SKU-specific image uploads through S3
+- CASL manager rules for product, SKU, and image writes
 - Structured logging with redaction and a correlation id
 - The unit and end-to-end harnesses, and CI
 
 Deliberately absent:
 
-- **Every business feature.** No products, carts, orders or payments module.
-  A module with a controller full of `TODO` is worse than no module.
+- **The remaining business features.** Likes, carts, orders, payment intents,
+  payment links, Stripe webhooks, and stock notifications are not implemented.
 - **Any endpoint beyond the 28 in the contract.** No health route, no
   `/docs` route, no admin or reporting views.
 - **Redis's consumer.** Redis runs in Compose because the stock-notification
