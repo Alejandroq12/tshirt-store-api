@@ -6,6 +6,7 @@ import { AppConfigModule } from './config/config.module';
 import { LoggingModule } from './logging/logging.module';
 import { MailModule } from './mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ProductsModule } from './products/products.module';
 import { RateLimitModule } from './security/rate-limit.module';
 import { StorageModule } from './storage/storage.module';
 
@@ -16,6 +17,7 @@ import { StorageModule } from './storage/storage.module';
     PrismaModule,
     AuthModule,
     AuthorizationModule,
+    ProductsModule,
     RateLimitModule,
     StorageModule,
     MailModule,
