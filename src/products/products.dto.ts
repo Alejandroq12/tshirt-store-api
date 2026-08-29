@@ -10,6 +10,8 @@ import {
   MinLength,
 } from 'class-validator';
 
+import { OptionalProperty } from '../common/validation/optional-property.decorator';
+
 export enum ProductStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
@@ -53,11 +55,11 @@ export class CreateProductRequest {
 }
 
 export class UpdateProductRequest {
-  @IsOptional()
+  @OptionalProperty()
   @IsUUID()
   categoryId?: string;
 
-  @IsOptional()
+  @OptionalProperty()
   @IsString()
   @MinLength(1)
   @MaxLength(200)
@@ -67,7 +69,7 @@ export class UpdateProductRequest {
   @IsString()
   description?: string | null;
 
-  @IsOptional()
+  @OptionalProperty()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
 }

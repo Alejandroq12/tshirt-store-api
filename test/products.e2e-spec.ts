@@ -486,6 +486,36 @@ describe('Products (e2e)', () => {
       .expect(422);
   });
 
+  it('rejects null for non-nullable fields while allowing a null description', async () => {
+    const category = await createCategory();
+    const product = await createProduct(category.id, {
+      description: 'Original description',
+    });
+    const manager = await login('MANAGER');
+    const path = `/v1/products/${product.id}`;
+
+    const nullName = await request(app.getHttpServer())
+      .patch(path)
+      .set('Authorization', `Bearer ${manager.accessToken}`)
+      .send({ name: null })
+      .expect(422);
+    expect(
+      (nullName.body as { errors: Array<{ field: string }> }).errors.map(
+        ({ field }) => field,
+      ),
+    ).toContain('name');
+
+    const nullDescription = await request(app.getHttpServer())
+      .patch(path)
+      .set('Authorization', `Bearer ${manager.accessToken}`)
+      .send({ description: null })
+      .expect(200);
+    expect(nullDescription.body).toMatchObject({ description: null });
+    await expect(
+      prisma.product.findUniqueOrThrow({ where: { id: product.id } }),
+    ).resolves.toMatchObject({ description: null });
+  });
+
   it('requires a usable primary image, supports disable/reactivate, and makes retirement terminal', async () => {
     const category = await createCategory();
     const product = await createProduct(category.id);
