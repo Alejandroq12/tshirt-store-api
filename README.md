@@ -9,6 +9,12 @@ Image upload is written but still work in progress: it needs an S3 bucket that
 is not set up yet. It is not a hard requirement for week 3, so it lands in week 4. Carts, orders, payments and stock notifications are not written yet.
 [Scope](#scope) lists both sides.
 
+## Deployment
+
+The API is deployed at
+<https://t-shirt-api-2e742ec1e3f1.herokuapp.com/>. All endpoints are available
+under `/v1`.
+
 ## Requirements
 
 - Node.js 22 or newer
