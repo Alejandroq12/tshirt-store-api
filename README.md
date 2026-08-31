@@ -4,9 +4,10 @@ A NestJS service that implements the contract in
 [`api/openapi.yaml`](api/openapi.yaml): 23 paths and 28 operations covering
 authentication, catalog, carts, orders and Stripe payments.
 
-**15 of the 28 operations are built.** Authentication, products, SKUs and image
-uploads work. Carts, orders, payments and stock notifications are not written
-yet. [Scope](#scope) lists both sides.
+**15 of the 28 operations are built.** Authentication, products and SKUs work.
+Image upload is written but still work in progress: it needs an S3 bucket that
+is not set up yet. It is not a hard requirement for week 3, so it lands in week 4. Carts, orders, payments and stock notifications are not written yet.
+[Scope](#scope) lists both sides.
 
 ## Requirements
 
@@ -155,7 +156,8 @@ report the test database while being connected to the development one.
 Built:
 
 - All seven authentication operations, with session revocation and email
-- Products, SKUs and image uploads, with public reads
+- Products and SKUs, with public reads
+- Image upload (work in progress: needs an S3 bucket)
 - CASL rules for manager writes on products, SKUs and images
 - Environment validation that stops the boot on a bad value
 - The global exception filter, the validation pipe and the `/v1` prefix
