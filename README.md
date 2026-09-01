@@ -15,6 +15,9 @@ The API is deployed at
 <https://t-shirt-api-2e742ec1e3f1.herokuapp.com/>. All endpoints are available
 under `/v1`.
 
+Production password-reset and password-change emails are delivered through
+Mailtrap from the DNS-verified sending domain `quezadajulio.com`.
+
 ## Requirements
 
 - Node.js 22 or newer
