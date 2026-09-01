@@ -2,9 +2,12 @@ import 'reflect-metadata';
 
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { config as loadEnvironmentFiles } from 'dotenv';
 
 import { validateEnvironment } from '../src/config/env.validation';
 import { validateSeedEnvironment } from '../src/config/seed-env.validation';
+
+loadEnvironmentFiles({ path: ['.env.seed', '.env'], quiet: true });
 
 const prisma = new PrismaClient();
 
