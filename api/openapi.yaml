@@ -8,6 +8,8 @@ info:
     orders, payments, and role-based operations for clients and managers.
 
 servers:
+  - url: https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1
+    description: Production deployment
   - url: /v1
     description: Deployment-independent API base path
 
@@ -362,7 +364,7 @@ paths:
               schema:
                 type: string
                 format: uri-reference
-                example: /v1/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2
+                examples: [/v1/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2]
               description: URL of the created product
           content:
             application/json:
@@ -570,7 +572,7 @@ paths:
               schema:
                 type: string
                 format: uri-reference
-                example: /v1/skus/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3
+                examples: [/v1/skus/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3]
               description: URL of the created SKU
           content:
             application/json:
@@ -1068,7 +1070,7 @@ paths:
               schema:
                 type: string
                 format: uri-reference
-                example: /v1/orders/ffffffff-ffff-4fff-8fff-fffffffffff1
+                examples: [/v1/orders/ffffffff-ffff-4fff-8fff-fffffffffff1]
               description: URL of the created order
           content:
             application/json:
@@ -1654,7 +1656,7 @@ components:
         type:
           type: string
           format: uri
-          example: about:blank
+          examples: [about:blank]
           description: >-
             Stable URI identifying the error kind. `about:blank` represents
             the HTTP status itself; documented application URNs distinguish
@@ -1681,10 +1683,10 @@ components:
       unevaluatedProperties: false
 
     BadRequestProblem:
-      example:
-        type: about:blank
-        title: Bad Request
-        status: 400
+      examples:
+        - type: about:blank
+          title: Bad Request
+          status: 400
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1693,10 +1695,10 @@ components:
               const: 400
 
     UnauthorizedProblem:
-      example:
-        type: about:blank
-        title: Unauthorized
-        status: 401
+      examples:
+        - type: about:blank
+          title: Unauthorized
+          status: 401
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1705,10 +1707,10 @@ components:
               const: 401
 
     ForbiddenProblem:
-      example:
-        type: about:blank
-        title: Forbidden
-        status: 403
+      examples:
+        - type: about:blank
+          title: Forbidden
+          status: 403
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1717,10 +1719,10 @@ components:
               const: 403
 
     NotFoundProblem:
-      example:
-        type: about:blank
-        title: Not Found
-        status: 404
+      examples:
+        - type: about:blank
+          title: Not Found
+          status: 404
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1729,10 +1731,10 @@ components:
               const: 404
 
     ConflictProblem:
-      example:
-        type: about:blank
-        title: Conflict
-        status: 409
+      examples:
+        - type: about:blank
+          title: Conflict
+          status: 409
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1741,10 +1743,10 @@ components:
               const: 409
 
     PayloadTooLargeProblem:
-      example:
-        type: about:blank
-        title: Content Too Large
-        status: 413
+      examples:
+        - type: about:blank
+          title: Content Too Large
+          status: 413
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1753,10 +1755,10 @@ components:
               const: 413
 
     UnsupportedMediaTypeProblem:
-      example:
-        type: about:blank
-        title: Unsupported Media Type
-        status: 415
+      examples:
+        - type: about:blank
+          title: Unsupported Media Type
+          status: 415
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1765,10 +1767,10 @@ components:
               const: 415
 
     RateLimitProblem:
-      example:
-        type: about:blank
-        title: Too Many Requests
-        status: 429
+      examples:
+        - type: about:blank
+          title: Too Many Requests
+          status: 429
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1777,10 +1779,10 @@ components:
               const: 429
 
     PaymentProviderProblem:
-      example:
-        type: about:blank
-        title: Bad Gateway
-        status: 502
+      examples:
+        - type: about:blank
+          title: Bad Gateway
+          status: 502
       allOf:
         - $ref: '#/components/schemas/Problem'
         - type: object
@@ -1789,13 +1791,13 @@ components:
               const: 502
 
     ValidationProblem:
-      example:
-        type: about:blank
-        title: Unprocessable Content
-        status: 422
-        errors:
-          - field: email
-            message: Must be a valid email address.
+      examples:
+        - type: about:blank
+          title: Unprocessable Content
+          status: 422
+          errors:
+            - field: email
+              message: Must be a valid email address.
       allOf:
         - $ref: '#/components/schemas/ProblemFields'
         - type: object
@@ -1844,10 +1846,10 @@ components:
       unevaluatedProperties: false
 
     PaymentIntentConflict:
-      example:
-        type: about:blank
-        title: Conflict
-        status: 409
+      examples:
+        - type: about:blank
+          title: Conflict
+          status: 409
       allOf:
         - $ref: '#/components/schemas/ProblemFields'
         - type: object
