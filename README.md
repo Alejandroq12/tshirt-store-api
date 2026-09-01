@@ -11,12 +11,16 @@ orders, payments and stock notifications are not written yet.
 
 ## Deployment
 
-The API is deployed at
-<https://t-shirt-api-2e742ec1e3f1.herokuapp.com/>. All endpoints are available
-under `/v1`.
+The API is deployed at `https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1`.
 
-Production password-reset and password-change emails are delivered through
-Mailtrap from the DNS-verified sending domain `quezadajulio.com`.
+Nothing answers at `/`, because the contract defines no route there. To check
+that the service is up, list products. That operation is open to anonymous
+callers, and the contract makes `limit` and `offset` required:
+
+<https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1/products?limit=20&offset=0>
+
+Password-reset and password-change emails go out through Mailtrap, from the
+verified sending domain `quezadajulio.com`.
 
 ## Requirements
 
