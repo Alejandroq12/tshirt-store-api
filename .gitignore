@@ -70,3 +70,8 @@ vite.config.ts.timestamp-*
 .vite/
 
 .context/
+
+# Claude Code: personal overrides and the private study record stay out of the
+# repository. Everything else under .claude/ is shared tooling and is committed.
+.claude/settings.local.json
+.claude/learning-record.md
