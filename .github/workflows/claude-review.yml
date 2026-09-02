@@ -1,0 +1,107 @@
+name: Claude Code Review
+
+# Runs this repository's own review agents against a pull request.
+#
+# The prompt does not restate the review criteria. It points Claude at
+# .claude/agents/contract-auditor.md and .claude/agents/scope-warden.md, the
+# same definitions used locally, so editing an agent file changes both reviews
+# at once. That is the whole reason the agents are committed rather than
+# personal.
+#
+# This job comments. It never blocks a merge — a reviewer that blocks is a
+# reviewer that gets switched off within a week.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, labeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  claude-review:
+    name: Contract and scope review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    # Three guards, and every one of them costs money when it is missing.
+    #
+    # 1. A fork never receives the secret, so without this the job fails rather
+    #    than skips. This repository is public, so that is not hypothetical.
+    # 2. A draft pull request is unfinished; reviewing it now means paying to
+    #    review it again later.
+    # 3. `labeled` fires for every label. Only `claude-review` re-runs this,
+    #    which doubles as the way to ask for a second pass without reopening.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false &&
+      (github.event.action != 'labeled' || github.event.label.name == 'claude-review')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The review diffs against the base branch, which needs real history
+          # rather than the single commit a shallow clone provides.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@fa2b2666b747000bf42767d1f332065b375e3c8f # v1.0.214
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: true
+          display_report: true
+          claude_args: |
+            --model claude-sonnet-5
+            --max-turns 20
+            --allowedTools "Read,Grep,Glob,Bash(git:*)"
+          prompt: |
+            Review this pull request. It belongs to a training deliverable
+            evaluated against fixed requirements, so unrequested scope is a
+            defect here rather than a bonus.
+
+            Read these three files first and follow them as your instructions:
+
+            - `CLAUDE.md` — the conventions this codebase does not negotiate.
+            - `.claude/agents/contract-auditor.md` — how to audit the
+              implementation against `api/openapi.yaml`.
+            - `.claude/agents/scope-warden.md` — how to decide whether a change
+              has a requirement anchor.
+
+            Apply the contract-auditor definition first, then the scope-warden
+            definition, to the changed files only. Get the diff with
+            `git diff "origin/$GITHUB_BASE_REF...HEAD"`. Do not review files this
+            pull request does not touch.
+
+            You are read-only. You cannot edit files and must not try.
+
+            Post one comment with at most eight findings, most severe first:
+
+            - **Contract breaks** — a declared status code nothing can reach, an
+              authorization that does not match `x-authorization`, a response
+              shape that does not match the schema.
+            - **Unanchored scope** — code no requirement asks for. Say which
+              anchor you looked for and could not find. Something the README
+              already records as a deliberate exclusion or a known limitation is
+              not a finding.
+            - **Convention breaks** — money as a number, a `detail` on a 500, a
+              CASL rule outside its feature module, a controller method whose
+              name does not match its `operationId`, a `@Public()` the contract
+              does not justify.
+
+            For each finding give `file:line`, one sentence on what is wrong,
+            and the concrete request or deployment where it shows. A finding you
+            cannot ground that way is speculation — leave it out.
+
+            If the diff is clean against all three, say so in one line. Do not
+            manufacture findings to look useful, and do not summarise what the
+            pull request does; the author already knows.
