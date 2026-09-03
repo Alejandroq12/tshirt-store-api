@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tshirt-contract": {
+      "command": "node",
+      "args": ["mcp/contract-server.mjs"]
+    }
+  }
+}
