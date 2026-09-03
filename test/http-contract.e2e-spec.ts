@@ -1,8 +1,11 @@
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { sign } from 'jsonwebtoken';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
 import { TokenService } from '../src/auth/token.service';
+import type { EnvironmentVariables } from '../src/config/env.validation';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';
@@ -132,11 +135,15 @@ describe('Authentication guard (e2e)', () => {
   let app: INestApplication<App>;
   let tokens: TokenService;
   let prisma: PrismaService;
+  let accessTokenSecret: string;
 
   beforeAll(async () => {
     app = (await createTestApp()) as INestApplication<App>;
     tokens = app.get(TokenService);
     prisma = app.get(PrismaService);
+    accessTokenSecret = app
+      .get<ConfigService<EnvironmentVariables, true>>(ConfigService)
+      .get('JWT_ACCESS_SECRET', { infer: true });
   });
 
   beforeEach(async () => {
@@ -201,5 +208,30 @@ describe('Authentication guard (e2e)', () => {
   it('refuses a malformed credential', async () => {
     await guarded().set('Authorization', 'Bearer not-a-token').expect(401);
     await guarded().set('Authorization', 'Basic dXNlcjpwYXNz').expect(401);
+  });
+
+  it('refuses a correctly signed access token with a past expiration', async () => {
+    const user = await createClient(prisma);
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        refreshTokenHash: 'expired-token-test-refresh-hash',
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const now = Math.floor(Date.now() / 1000);
+    const token = sign(
+      {
+        sub: user.id,
+        role: user.role,
+        sid: session.id,
+        iat: now - 120,
+        exp: now - 60,
+      },
+      accessTokenSecret,
+      { algorithm: 'HS256' },
+    );
+
+    await guarded().set('Authorization', `Bearer ${token}`).expect(401);
   });
 });
