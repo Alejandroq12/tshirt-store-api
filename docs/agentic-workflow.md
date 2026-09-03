@@ -10,7 +10,7 @@ it refuses to do, and where the boundaries are.
 
 ## The shape of it
 
-```
+```text
 CLAUDE.md              the working agreement, loaded into every session
 .claude/
   settings.json        permissions and hook registration, shared
@@ -50,7 +50,7 @@ schema. It is deliberately **not** in `.mcp.json`: a connection string is
 per-machine, and committing one means committing a port and a database name that
 are true for exactly one developer. Each person adds it at local scope instead:
 
-```
+```bash
 claude mcp add postgres --scope local -- \
   npx -y @modelcontextprotocol/server-postgres@0.6.2 \
   postgresql://tshirt:tshirt@localhost:5432/tshirt_store
@@ -129,7 +129,7 @@ issue, a comment or a review and it answers there, with the same `CLAUDE.md`,
 skills and agents loaded from the checkout. By default the action only responds
 to users with write access.
 
-Three things in those files are deliberate and easy to get wrong:
+Four things in those files are deliberate and easy to get wrong:
 
 - **Both actions are pinned by commit SHA**, not by tag. A tag can be moved; a
   SHA cannot. The version is a comment beside it.
@@ -139,6 +139,17 @@ Three things in those files are deliberate and easy to get wrong:
 - **`labeled` is filtered to one label.** `pull_request: types: [labeled]` fires
   for every label; only `claude-review` re-runs the review. That doubles as the
   way to ask for a second pass without reopening the pull request.
+- **A workflow change skips its own review.** The action refuses to run unless
+  the workflow file already exists, byte for byte, on the default branch. Any
+  pull request that edits `claude-review.yml` or `claude.yml` is therefore
+  reviewed by nothing, and the change has to reach the default branch before the
+  next pull request gets a real review. This is a defence, not a defect: without
+  it a pull request could rewrite the workflow to leak the token and then run the
+  rewritten version on itself.
+
+  It skips **green**. The step reports success in a second or two and the check
+  goes through, so a review that finishes suspiciously fast reviewed nothing —
+  read the step log rather than the check mark.
 
 ## Considered and not implemented
 

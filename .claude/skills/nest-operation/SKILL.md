@@ -31,7 +31,7 @@ choice.
 
 ## The file order
 
-```
+```text
 1. prisma/schema.prisma          only if the model does not exist
 2. src/<feature>/<feature>.dto.ts        request classes and param classes
 3. src/<feature>/<feature>.service.ts    the logic, and the response interfaces

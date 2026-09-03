@@ -76,7 +76,7 @@ from coverage collection.
 
 ## Layout
 
-```
+```text
 src/
   auth/            7 operations, JWT bound to a session row, Argon2id passwords
   authorization/   CASL mechanism only — no rules live here
