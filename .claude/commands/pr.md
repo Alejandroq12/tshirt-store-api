@@ -1,7 +1,7 @@
 ---
 description: Draft a commit breakdown and a pull-request description from the working tree
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git branch:*), Read, Grep, Glob, mcp__tshirt-contract__contract_progress, mcp__tshirt-contract__list_contract_operations
-argument-hint: '[base branch, default main]'
+argument-hint: '[base branch, default dev]'
 ---
 
 Draft the commits and the pull-request description for the current work.
@@ -15,7 +15,11 @@ authors every commit. Produce text they can act on.
 - `git status --porcelain`
 - `git diff HEAD` and `git diff --stat HEAD`
 - `git log --oneline -12` to match the existing message style
-- `git log --oneline ${ARGUMENTS:-main}..HEAD` for commits already on the branch
+- `git log --oneline ${ARGUMENTS:-dev}..HEAD` for commits already on the branch
+
+Feature branches here are cut from `dev` and merged back into it; `main` is the
+deployed branch. Diffing against `main` by mistake pulls in every commit `dev` is
+ahead by, which reads as though this branch changed all of it.
 
 Read the diff. Do not describe files by their names — describe what changed
 inside them.
