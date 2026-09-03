@@ -64,8 +64,10 @@ Unrequested scope is one failure; documentation that no longer describes the
 repository is the other, and it does more damage in a review. A reader has no
 way to tell a stale sentence from a false one.
 
-Check every committed file the change touches, and the ones that describe what
-it touches:
+Check every file the change touches and every file that describes what it
+touches. A file that is still untracked is part of the change like any other, so
+list them with `git status --porcelain --untracked-files=all` rather than reading
+the diff alone — `git diff` does not show them.
 
 - **A decision recorded as open that is now closed.** `docs/` describing an
   interpretation as pending confirmation when the code implements it, and a test

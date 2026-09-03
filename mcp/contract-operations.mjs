@@ -112,7 +112,10 @@ export const loadOperations = () => {
 
       const routed = methods.get(operation.operationId);
       const controller =
-        routed && routed.verb === method.toUpperCase() ? routed : undefined;
+        routed &&
+        (routed.verb === 'ALL' || routed.verb === method.toUpperCase())
+          ? routed
+          : undefined;
 
       operations.push({
         operationId: operation.operationId,
