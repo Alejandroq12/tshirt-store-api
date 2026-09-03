@@ -97,6 +97,7 @@ export const loadOperations = () => {
         authorization: operation['x-authorization'] ?? '',
         contractStatus: operation['x-contract-status'] ?? '',
         statusCodes: Object.keys(operation.responses ?? {}),
+        responses: describeResponses(operation.responses),
         requestSchema: schemaNameOf(operation.requestBody),
         implemented: controller !== undefined,
         controllerFile: controller ?? null,
@@ -106,6 +107,33 @@ export const loadOperations = () => {
 
   return operations;
 };
+
+/**
+ * What each declared status code means, and the schema it carries.
+ *
+ * The bare status-code list is not enough: a caller asking "what produces the
+ * 409" needs the contract's own description, and without it the only way to get
+ * one is to read api/openapi.yaml — which is exactly the cost this server
+ * exists to avoid.
+ */
+const describeResponses = (responses = {}) =>
+  Object.fromEntries(
+    Object.entries(responses).map(([code, response]) => {
+      if (response?.$ref) {
+        return [code, { sharedResponse: response.$ref.split('/').pop() }];
+      }
+
+      const schema = Object.values(response?.content ?? {})[0]?.schema?.$ref;
+
+      return [
+        code,
+        {
+          description: response?.description ?? '',
+          ...(schema ? { schema: schema.split('/').pop() } : {}),
+        },
+      ];
+    }),
+  );
 
 /**
  * The `$ref` target name of a request body, when it has one. Inline schemas and

@@ -1,6 +1,6 @@
 ---
 description: Spaced retrieval practice on Claude platform concepts, using this repository as the example
-allowed-tools: Read, Write, Edit, Grep, Glob
+allowed-tools: Read, Grep, Glob, Write(.claude/learning-record.md), Edit(.claude/learning-record.md)
 argument-hint: '[area: memory | permissions | commands | agents | skills | hooks | mcp | context | all]'
 ---
 

@@ -55,20 +55,25 @@ const main = async () => {
   if (existsSync(marker)) process.exit(0);
 
   const changed = changedPaths();
+  const changedSet = new Set(changed);
+
+  // Each source is matched to its own colocated spec. Checking only whether
+  // some spec changed lets an unrelated one — a touched users spec while the
+  // orders service changed — silence the reminder for everything.
   const sources = changed.filter(
     (path) =>
       path.startsWith('src/') &&
       path.endsWith('.ts') &&
-      !path.endsWith('.spec.ts'),
+      !path.endsWith('.spec.ts') &&
+      !changedSet.has(`${path.slice(0, -'.ts'.length)}.spec.ts`),
   );
-  const specs = changed.filter((path) => path.endsWith('.spec.ts'));
 
-  if (sources.length === 0 || specs.length > 0) process.exit(0);
+  if (sources.length === 0) process.exit(0);
 
   writeFileSync(marker, '');
 
   process.stderr.write(
-    `${sources.length} source file(s) under src/ changed and no *.spec.ts changed with them: ` +
+    `${sources.length} source file(s) under src/ changed without their colocated *.spec.ts: ` +
       `${sources.slice(0, 5).join(', ')}${sources.length > 5 ? ', …' : ''}. ` +
       `The challenge requires unit tests written alongside the code, focused on services. ` +
       `Either add or update the specs for that change, or state plainly why the change needs none ` +

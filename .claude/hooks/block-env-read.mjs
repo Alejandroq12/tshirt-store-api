@@ -46,7 +46,9 @@ const main = async () => {
 
   const command = toolInput.command;
   if (typeof command === 'string') {
-    for (const match of command.matchAll(/(?<![\w.-])\.env[\w.-]*/g)) {
+    const bare = command.replace(/['"]/g, '');
+
+    for (const match of bare.matchAll(/(?<![\w.-])\.env[\w.-]*/g)) {
       if (PROTECTED.has(match[0])) refuse(match[0]);
     }
   }
