@@ -9,7 +9,7 @@ const complete = (overrides: Record<string, string> = {}) => ({
 });
 
 describe('validateSeedEnvironment', () => {
-  it('accepts the values shipped in .env.example, so a fresh clone can seed', () => {
+  it('accepts the values shipped in .env.seed.example, so a fresh clone can seed', () => {
     expect(() => validateSeedEnvironment(complete())).not.toThrow();
   });
 
@@ -32,7 +32,7 @@ describe('validateSeedEnvironment', () => {
   });
 
   describe('production', () => {
-    it('refuses the password published in .env.example', () => {
+    it('refuses the password published in .env.seed.example', () => {
       expect(() =>
         validateSeedEnvironment(complete({ NODE_ENV: 'production' })),
       ).toThrow(/SEED_MANAGER_PASSWORD still holds the placeholder/);

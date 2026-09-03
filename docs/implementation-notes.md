@@ -114,26 +114,53 @@ To prevent the YAML contract from degrading during development:
 Status when the design was delivered: valid, 0 errors, 1 warning
 (`info-license`, intentionally ignored).
 
-## 5. Decisions to confirm with Erick during implementation
+## 5. Interpretations this delivery rests on
 
-None blocks initial development, but each is my interpretation rather than an
-instruction from Erick:
+Each of these is a reading of a requirement rather than a literal instruction.
+They are recorded because a reviewer should be able to see where judgment was
+applied, and disagree with it on the merits.
 
-- **"Delete products" as a soft deletion.** `PATCH /products/{id}` with
-  `status: retired`, without `DELETE`. He considered it reasonable in the
-  meeting but did not confirm it as the final interpretation.
-- **The `active`, `inactive`, and `retired` statuses.** Only `inactive`
-  maps directly to a requirement ("Disable products").
-- **`retired` is permanent and cannot be reactivated.**
-- **The per-SKU image model.** He asked for image selection by variant; the
-  concrete design (`sku_image_assignments` as many-to-many with fallback) is
-  mine.
-- **`GET /manager/products` as the unnecessary endpoint.** He said one
-  endpoint was unnecessary but never identified it. I removed this one based
-  on my own traceability assessment, not because he named it.
-- **Stripe.** The model still marks its identifiers as BLUEPRINT pending the
-  workshop, while the contract already describes the complete flow. Align them
-  after the workshop.
+### Built, and settled
+
+- **"Delete products" is a soft deletion.** `PATCH /products/{productId}` with
+  `status: retired`, and no `DELETE` route. `trg_products_prevent_hard_delete`
+  rejects a physical delete at the database, so the interpretation is enforced
+  rather than merely intended. The alternative — a real `DELETE` — was rejected
+  because orders reference products and a hard delete would either orphan an
+  order line or cascade a customer's purchase history out of existence.
+- **`retired` is permanent.** A retired product refuses every status change
+  except an idempotent re-retire; `products.service.ts` answers 409 otherwise
+  and `test/products.e2e-spec.ts` asserts it. Name, description and category
+  stay editable, because only the status is terminal.
+- **Three product states, `active`, `inactive`, `retired`.** Only `inactive`
+  maps to a requirement by name ("Disable products"). `active` and `retired`
+  exist because "disable" implies a state to return to and "delete" needs a
+  terminal one. Adding a fourth was considered and rejected: no requirement
+  distinguishes any further state, and each one multiplies the visibility rules
+  every catalogue read has to apply.
+
+### Built, and open to a different answer
+
+- **`GET /manager/products` removed.** Erick said one endpoint was unnecessary
+  without naming it. This one was removed on a traceability assessment: every
+  behavior it offered is reachable through `GET /products` with an
+  authenticated manager, which `@OptionalAuth()` already distinguishes. If he
+  meant a different endpoint, this is the decision to revisit.
+
+- **The per-SKU image model.** The requirement asks for image selection by
+  variant; `sku_image_assignments` as a many-to-many with a product-level
+  fallback is one way to satisfy it. A simpler design — one image row per SKU,
+  no sharing — was rejected because the same photograph usually covers several
+  sizes of one colour, and duplicating it per SKU would duplicate the S3 object
+  too. The cost of the chosen design is the composite foreign key and the
+  fallback resolution in `skus.service.ts`.
+
+### Still open
+
+- **Stripe identifiers.** `docs/db.dbml` still marks them as blueprint pending
+  the payments workshop, while the contract already describes the complete flow.
+  They are aligned when payments are implemented, which is where the concrete
+  shape stops being a guess.
 
 ## 6. Where each rule is documented
 

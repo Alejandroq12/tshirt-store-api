@@ -51,7 +51,7 @@ per-machine, and committing one means committing a port and a database name that
 are true for exactly one developer. Each person adds it at local scope instead:
 
 ```bash
-claude mcp add postgres --scope local -- \
+claude mcp add --transport stdio --scope local postgres -- \
   npx -y @modelcontextprotocol/server-postgres@0.6.2 \
   postgresql://tshirt:tshirt@localhost:5432/tshirt_store
 ```
