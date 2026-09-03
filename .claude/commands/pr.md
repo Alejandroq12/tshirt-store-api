@@ -12,10 +12,17 @@ authors every commit. Produce text they can act on.
 
 ## Read the actual change first
 
-- `git status --porcelain`
+- `git status --porcelain --untracked-files=all`
 - `git diff HEAD` and `git diff --stat HEAD`
 - `git log --oneline -12` to match the existing message style
 - `git log --oneline ${ARGUMENTS:-dev}..HEAD` for commits already on the branch
+
+**`git diff HEAD` does not show untracked files.** A new file is exactly the
+kind of change worth reading closely, and it is invisible to the diff that
+describes the rest of the work. Plain `--porcelain` also collapses a wholly new directory into one `??` entry,
+which is why the listing above passes `--untracked-files=all`. Take every path
+it marks `??`, read each one in full, and treat it as part of the change. A summary that silently
+omits a whole new file is worse than no summary.
 
 Feature branches here are cut from `dev` and merged back into it; `main` is the
 deployed branch. Diffing against `main` by mistake pulls in every commit `dev` is
@@ -23,6 +30,35 @@ ahead by, which reads as though this branch changed all of it.
 
 Read the diff. Do not describe files by their names — describe what changed
 inside them.
+
+## Audit the diff before describing it
+
+Reading the diff to summarise it and reading it to find what should not ship are
+two different passes, and only the second one catches anything. Do this one
+first, and report what it finds even when the answer is nothing.
+
+Go through the diff looking for:
+
+- **Anything accidental.** A file touched for no reason, a formatting-only
+  change mixed into a behavioural one, a dependency added and not used, a
+  generated file that should be ignored.
+- **Debug residue.** `console.log`, a `.only` or `.skip` on a test, a commented-out
+  block, a temporary script, a hardcoded value that was meant to be read from
+  configuration.
+- **Unfinished markers.** A `TODO`, `FIXME` or "pending" note introduced by this
+  change. Either it is finished or it is a known limitation someone wrote down.
+- **Documentation the change made false.** A count, an instruction, a path, or a
+  decision recorded as open that this change closes. Nothing catches these
+  automatically, which is why they belong in this pass.
+- **A new error path with no test**, and a new branch in a service that no spec
+  reaches. Name the case, not the coverage percentage.
+- **Something the requirements do not ask for.** Run the reasoning in `/anchor`
+  on it, or say plainly that it is unanchored.
+- **Secrets or credentials**, in any form, including in a fixture or an example.
+
+Report this as a short list before the commit breakdown. If the diff is clean,
+say so in one line — but only after actually reading it, and say what you read
+(the file count and the line count) so the claim is checkable.
 
 ## The commit breakdown
 

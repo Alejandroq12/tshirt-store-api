@@ -55,6 +55,46 @@ If `npm config get ignore-scripts` says `true`, two setup steps are skipped.
 Run `npm run db:generate` to build the Prisma client, and `npx husky` if you
 want the pre-commit hook.
 
+### What the environment holds
+
+There are three templates — `.env.example`, `.env.test.example` and
+`.env.seed.example` — and `src/config/published-placeholders.spec.ts` reads all
+of them from disk. It checks the variables whose name ends in `SECRET`,
+`PASSWORD`, `KEY` or `TOKEN`: each such value has to be listed as a published
+placeholder, which is what makes production refuse to boot on it. A secret held
+under a name outside that pattern is not caught. `src/config/env.validation.ts` is the list the
+application itself validates; the AWS SDK reads a few more of its own, noted
+below.
+
+Validation runs at boot and stops it on a bad value, rather than failing later
+at the first request that needed it. Variables fall into four groups:
+
+- **Required.** The database and Redis URLs, both JWT secrets and their TTLs,
+  the reset-token TTL, the CORS allow-list, the store currency, the SMTP host
+  and port, the sender address, the S3 region and bucket, and the three Stripe
+  settings. Required means present and well-formed, not real: the placeholders
+  in `.env.example` satisfy validation, which is what lets a fresh clone boot.
+- **Defaulted.** `NODE_ENV`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `SMTP_SECURE`,
+  the three Argon2 cost parameters, and the two password-reset rate-limit
+  settings. Leaving them out is fine.
+- **Optional.** `SMTP_USER` and `SMTP_PASSWORD`, which an unauthenticated relay
+  such as the local Mailpit does not need; `AWS_ACCESS_KEY_ID` and
+  `AWS_SECRET_ACCESS_KEY`; and `AWS_S3_PUBLIC_BASE_URL`, which only changes the
+  host in a returned image URL.
+- **Read by Compose, not by the application.** `POSTGRES_*`, `REDIS_PORT` and
+  `MAILPIT_UI_PORT`.
+
+Two things worth knowing before they surprise you:
+
+- **The S3 client is constructed with a region and no credentials**, so it uses
+  the AWS default provider chain. The two AWS variables above are one way to
+  feed it; an instance role or a shared credentials file works as well, and
+  `AWS_SESSION_TOKEN` is honoured by that chain even though the application
+  never reads it by name. It is in the log redaction list for that reason.
+- **The Redis and Stripe settings are validated at boot although nothing reads
+  them yet.** Queues and payments are not built. Production additionally
+  refuses to start when a secret still holds the value published in a template.
+
 ### The seed is not optional
 
 Two things cannot be created through the API, so they come from
@@ -89,7 +129,7 @@ never receives the manager's password, so it cannot leak it.
 ## Layout
 
 ```
-api/openapi.yaml       the delivered contract, frozen
+api/openapi.yaml       the delivered contract. A pull request that breaks it fails CI
 docs/                  the database and lifecycle design
 prisma/schema.prisma   16 models, 21 foreign keys, 3 enums
 prisma/migrations/     generated DDL, then the hand-written constraints
@@ -190,6 +230,28 @@ Not built:
 - **Stripe.** The SDK, the webhook route and signature checking belong to
   payments.
 
+## Where the requirements needed interpretation
+
+Three requirements admitted more than one reading, and one piece of review
+feedback did not say which endpoint it meant. These are the readings this
+implementation took, so a reviewer can disagree with the choice rather than
+having to discover it.
+[`docs/implementation-notes.md`](docs/implementation-notes.md) records the
+alternative that was rejected in each case and why.
+
+- **"Delete products"** is `PATCH` with `status: retired`, not `DELETE`. Orders
+  reference products, so a hard delete would either orphan an order line or take
+  a customer's purchase history with it. A database trigger enforces the reading.
+- **"Disable products"** implies a state to return to, so products have three
+  states rather than two: `active`, `inactive`, `retired`. Only `inactive` is
+  named by a requirement.
+- **"Variant-specific images"** became a many-to-many between images and SKUs
+  with a product-level fallback, because one photograph usually covers several
+  sizes of a colour and the alternative duplicates the S3 object per SKU.
+- **The endpoint removed as unnecessary** was `GET /manager/products`. The
+  feedback did not name which one; everything it offered is reachable through
+  `GET /products` as an authenticated manager.
+
 ## Decisions worth knowing
 
 Cases the requirements do not name, where the plain reading would have left
@@ -221,13 +283,24 @@ something broken.
 ## Known limitations
 
 - **`npm audit` reports 3 high advisories**, all in one chain:
-  `prisma` → `@prisma/config` → `deepmerge-ts`. `@prisma/client` has no
-  dependencies and never loads any of it, so the vulnerable code is not
-  reachable from the running API. It is CLI tooling used when migrating and
-  generating. It can still show up in a production dependency graph, because
-  `prisma` is an optional peer of `@prisma/client`. The only available fix is
-  downgrading to `prisma@6.12`, which npm flags as breaking. The real fix is
-  tracked upstream.
+  `prisma` → `@prisma/config` → `deepmerge-ts`. Every non-breaking fix has been
+  applied, so these three are what remains rather than what has been ignored —
+  `npm audit fix` makes no further change.
+  `@prisma/client` has no dependencies and never loads any of it, so the
+  vulnerable code is not reachable from the running API. It is CLI tooling used
+  when migrating and generating. It can still show up in a production
+  dependency graph, because `prisma` is an optional peer of `@prisma/client`.
+  The only remaining fix is downgrading to `prisma@6.12`, which npm flags as
+  breaking. The real fix is tracked upstream.
+- **The boot demands configuration nothing reads yet.** `REDIS_URL` and the
+  three Stripe settings have to be present and well-formed or the application
+  refuses to start, although no code path consumes them until queues and
+  payments are built. The check is on shape, not connectivity: a syntactically
+  valid URL satisfies it and no Redis or Stripe account has to exist. The cost is
+  therefore a line in a deployment checklist rather than an add-on, but it is a
+  line that serves nothing today. Validating the whole environment at once is
+  what makes a bad value fail the boot instead of the first request that needed
+  it, and splitting the schema per feature was judged not worth that trade.
 - **The rate limit counts per instance.** The throttler keeps its counters in
   memory, so running more than one instance multiplies the effective limit. A
   shared counter belongs on the Redis that Compose already runs, and arrives

@@ -1,5 +1,6 @@
 import {
   ArgumentsHost,
+  BadRequestException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -130,6 +131,33 @@ describe('ProblemExceptionFilter', () => {
     filter.catch(new ForbiddenException('Forbidden'), host);
 
     expect(captured.body.detail).toBeUndefined();
+  });
+
+  it('joins a multi-line message into a single detail', () => {
+    const { host, captured } = capture();
+
+    filter.catch(
+      new BadRequestException([
+        'size must be a string',
+        'color should not be empty',
+      ]),
+      host,
+    );
+
+    expect(captured.body.detail).toBe(
+      'size must be a string; color should not be empty',
+    );
+  });
+
+  it('drops a message array that carries no strings', () => {
+    const { host, captured } = capture();
+
+    filter.catch(new BadRequestException([{ constraint: 'isString' }]), host);
+
+    expect(captured.body.detail).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(captured.body))).not.toHaveProperty(
+      'detail',
+    );
   });
 
   it('emits the contract URN when a problem type is thrown explicitly', () => {
