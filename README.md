@@ -322,6 +322,27 @@ something broken.
   memory, so running more than one instance multiplies the effective limit. A
   shared counter belongs on the Redis that Compose already runs, and arrives
   with the queue.
+- **A failed insert can leave an active Payment Link with no local row.**
+  `POST /payment-links` creates the link at Stripe before storing it, so a
+  database failure in that window leaves a live, payable URL the API never
+  returned. Paying it produces a signed event that matches no `payment_links`
+  row, which the webhook stores unprocessed with its error and answers 204 —
+  the money is captured and visible, not lost. Recovery is an operator reading
+  `stripe_webhook_events` until the queue section adds the producer that
+  reprocesses `processed_at IS NULL`. Deactivating the link in a compensating
+  catch would narrow the window, not close it, because that call can fail too.
+- **`STORE_CURRENCY` is only correct for two-decimal currencies.** Amounts
+  reach Stripe as `value × 100`, which is wrong for a zero-decimal currency
+  such as JPY. The contract permits any ISO code in `Currency` but its `Amount`
+  pattern is `^(0|[1-9]\d{0,7})\.\d{2}$` and the column is `decimal(10,2)`, so
+  a zero-decimal currency cannot be represented in a conforming response
+  either. Supporting one is a contract change, not a service change.
+- **The webhook trusts the amount on a verified Stripe event.** A
+  `payment_intent.succeeded` event is applied to its order without comparing
+  `amount_received` against the frozen total. Repricing a Payment Intent
+  requires the secret key, and an attacker holding that key can create charges
+  directly, so the check would add no protection that the key itself does not
+  already remove.
 
 ## Design documents
 
