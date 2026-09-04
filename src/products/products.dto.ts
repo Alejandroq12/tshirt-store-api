@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -38,6 +39,11 @@ export class ListProductsQuery {
 export class ProductIdParams {
   @IsUUID()
   productId!: string;
+}
+
+export class LikeUpdateRequest {
+  @IsBoolean()
+  liked!: boolean;
 }
 
 export class CreateProductRequest {

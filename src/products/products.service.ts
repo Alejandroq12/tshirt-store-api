@@ -11,6 +11,7 @@ import type { EnvironmentVariables } from '../config/env.validation';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateProductRequest,
+  LikeUpdateRequest,
   ListProductsQuery,
   ProductStatus,
   UpdateProductRequest,
@@ -72,6 +73,11 @@ export interface ProductResponse {
   retiredAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LikeStateResponse {
+  productId: string;
+  liked: boolean;
 }
 
 interface CategoryResponse {
@@ -292,6 +298,44 @@ export class ProductsService {
         where: { id: productId },
       }),
     );
+  }
+
+  async setLiked(
+    productId: string,
+    input: LikeUpdateRequest,
+    user: AuthenticatedUser,
+  ): Promise<LikeStateResponse> {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, ...visibleProductWhere(user) },
+      select: { id: true },
+    });
+
+    if (!product) throw new NotFoundException();
+
+    if (input.liked) {
+      try {
+        await this.prisma.productLike.upsert({
+          where: {
+            clientId_productId: { clientId: user.id, productId },
+          },
+          create: { clientId: user.id, productId },
+          update: {},
+        });
+      } catch (error) {
+        if (
+          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+          error.code !== 'P2002'
+        ) {
+          throw error;
+        }
+      }
+    } else {
+      await this.prisma.productLike.deleteMany({
+        where: { clientId: user.id, productId },
+      });
+    }
+
+    return { productId, liked: input.liked };
   }
 
   private async requireCategory(categoryId: string): Promise<void> {

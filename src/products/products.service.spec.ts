@@ -47,6 +47,8 @@ describe('ProductsService', () => {
   const categoryFindUnique = jest.fn();
   const likeFindMany = jest.fn();
   const likeFindFirst = jest.fn();
+  const likeUpsert = jest.fn();
+  const likeDeleteMany = jest.fn();
   const imageFindFirst = jest.fn();
   const transaction = jest.fn(async (operations: Array<Promise<unknown>>) =>
     Promise.all(operations),
@@ -62,7 +64,12 @@ describe('ProductsService', () => {
       updateMany: productUpdateMany,
     },
     category: { findUnique: categoryFindUnique },
-    productLike: { findMany: likeFindMany, findFirst: likeFindFirst },
+    productLike: {
+      findMany: likeFindMany,
+      findFirst: likeFindFirst,
+      upsert: likeUpsert,
+      deleteMany: likeDeleteMany,
+    },
     productImage: { findFirst: imageFindFirst },
     $transaction: transaction,
   } as unknown as PrismaService;
@@ -87,6 +94,8 @@ describe('ProductsService', () => {
     categoryFindUnique.mockResolvedValue({ id: CATEGORY.id });
     likeFindMany.mockResolvedValue([]);
     likeFindFirst.mockResolvedValue(null);
+    likeUpsert.mockResolvedValue({});
+    likeDeleteMany.mockResolvedValue({ count: 1 });
     imageFindFirst.mockResolvedValue({ id: 'image-id' });
   });
 
@@ -476,5 +485,99 @@ describe('ProductsService', () => {
     await expect(
       service.update(PRODUCT.id, { status: ProductStatus.ACTIVE }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('creates the row when a client likes a visible product', async () => {
+    productFindFirst.mockResolvedValue({ id: PRODUCT.id });
+
+    await expect(
+      service.setLiked(PRODUCT.id, { liked: true }, CLIENT),
+    ).resolves.toEqual({ productId: PRODUCT.id, liked: true });
+    expect(productFindFirst).toHaveBeenCalledWith({
+      where: { id: PRODUCT.id, isActive: true, deletedAt: null },
+      select: { id: true },
+    });
+    expect(likeUpsert).toHaveBeenCalledWith({
+      where: {
+        clientId_productId: {
+          clientId: CLIENT.id,
+          productId: PRODUCT.id,
+        },
+      },
+      create: { clientId: CLIENT.id, productId: PRODUCT.id },
+      update: {},
+    });
+  });
+
+  it('uses the same upsert when a client likes a product twice', async () => {
+    productFindFirst.mockResolvedValue({ id: PRODUCT.id });
+
+    await service.setLiked(PRODUCT.id, { liked: true }, CLIENT);
+    await service.setLiked(PRODUCT.id, { liked: true }, CLIENT);
+
+    expect(likeUpsert).toHaveBeenCalledTimes(2);
+    expect(likeUpsert.mock.calls[0]).toEqual(likeUpsert.mock.calls[1]);
+  });
+
+  it('removes the row when a client unlikes a product', async () => {
+    productFindFirst.mockResolvedValue({ id: PRODUCT.id });
+
+    await expect(
+      service.setLiked(PRODUCT.id, { liked: false }, CLIENT),
+    ).resolves.toEqual({ productId: PRODUCT.id, liked: false });
+    expect(likeDeleteMany).toHaveBeenCalledWith({
+      where: { clientId: CLIENT.id, productId: PRODUCT.id },
+    });
+  });
+
+  it('succeeds when a client unlikes a product they never liked', async () => {
+    productFindFirst.mockResolvedValue({ id: PRODUCT.id });
+    likeDeleteMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.setLiked(PRODUCT.id, { liked: false }, CLIENT),
+    ).resolves.toEqual({ productId: PRODUCT.id, liked: false });
+  });
+
+  it('treats a concurrent duplicate like as success', async () => {
+    productFindFirst.mockResolvedValue({ id: PRODUCT.id });
+    likeUpsert.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('constraint failed', {
+        code: 'P2002',
+        clientVersion: '6.19.3',
+      }),
+    );
+
+    await expect(
+      service.setLiked(PRODUCT.id, { liked: true }, CLIENT),
+    ).resolves.toEqual({ productId: PRODUCT.id, liked: true });
+  });
+
+  it('does not hide other database failures while liking', async () => {
+    const failure = new Error('database unavailable');
+    productFindFirst.mockResolvedValue({ id: PRODUCT.id });
+    likeUpsert.mockRejectedValue(failure);
+
+    await expect(
+      service.setLiked(PRODUCT.id, { liked: true }, CLIENT),
+    ).rejects.toBe(failure);
+  });
+
+  it('refuses a product the client cannot see', async () => {
+    await expect(
+      service.setLiked(PRODUCT.id, { liked: true }, CLIENT),
+    ).rejects.toThrow(NotFoundException);
+    expect(productFindFirst).toHaveBeenCalledWith({
+      where: { id: PRODUCT.id, isActive: true, deletedAt: null },
+      select: { id: true },
+    });
+    expect(likeUpsert).not.toHaveBeenCalled();
+  });
+
+  it('checks visibility before unliking, not only before liking', async () => {
+    await expect(
+      service.setLiked(PRODUCT.id, { liked: false }, CLIENT),
+    ).rejects.toThrow(NotFoundException);
+    expect(likeDeleteMany).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,10 @@ class ProductsAbilityRegistrar implements OnModuleInit {
 
   onModuleInit(): void {
     this.abilities.register((user, { can }) => {
+      if (user.role === UserRole.CLIENT) {
+        can('update', 'ProductLike');
+        return;
+      }
       if (user.role !== UserRole.MANAGER) return;
       can('create', 'Product');
       can('update', 'Product');

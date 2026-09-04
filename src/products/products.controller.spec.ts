@@ -10,7 +10,11 @@ import type { ProductsService } from './products.service';
 
 type MethodName = keyof Pick<
   ProductsController,
-  'listProducts' | 'createProduct' | 'getProduct' | 'updateProduct'
+  | 'listProducts'
+  | 'createProduct'
+  | 'getProduct'
+  | 'updateProduct'
+  | 'setProductLiked'
 >;
 
 const metadataFor = (key: string, method: MethodName): unknown => {
@@ -40,6 +44,7 @@ describe('ProductsController', () => {
     create: jest.fn(),
     get: jest.fn(),
     update: jest.fn(),
+    setLiked: jest.fn(),
   };
   const controller = new ProductsController(
     products as unknown as ProductsService,
@@ -48,6 +53,11 @@ describe('ProductsController', () => {
     id: '11111111-1111-4111-8111-111111111111',
     role: 'MANAGER',
     sessionId: '22222222-2222-4222-8222-222222222222',
+  };
+  const client: AuthenticatedUser = {
+    id: '33333333-3333-4333-8333-333333333333',
+    role: 'CLIENT',
+    sessionId: '44444444-4444-4444-8444-444444444444',
   };
 
   beforeEach(() => {
@@ -84,6 +94,7 @@ describe('ProductsController', () => {
     expect(metadataFor(IS_OPTIONAL_AUTH, 'getProduct')).toBe(true);
     expect(metadataFor(IS_OPTIONAL_AUTH, 'createProduct')).toBeUndefined();
     expect(metadataFor(IS_OPTIONAL_AUTH, 'updateProduct')).toBeUndefined();
+    expect(metadataFor(IS_OPTIONAL_AUTH, 'setProductLiked')).toBeUndefined();
   });
 
   it('requires the exact CASL abilities on writes', () => {
@@ -93,11 +104,37 @@ describe('ProductsController', () => {
     expect(metadataFor(REQUIRED_ABILITIES, 'updateProduct')).toEqual([
       { action: 'update', subject: 'Product' },
     ]);
+    expect(metadataFor(REQUIRED_ABILITIES, 'setProductLiked')).toEqual([
+      { action: 'update', subject: 'ProductLike' },
+    ]);
     expect(metadataFor(GUARDS_METADATA, 'createProduct')).toContain(
       AbilitiesGuard,
     );
     expect(metadataFor(GUARDS_METADATA, 'updateProduct')).toContain(
       AbilitiesGuard,
+    );
+    expect(metadataFor(GUARDS_METADATA, 'setProductLiked')).toContain(
+      AbilitiesGuard,
+    );
+  });
+
+  it('passes the caller and requested liked state to the service', async () => {
+    products.setLiked.mockResolvedValue({
+      productId: PRODUCT.id,
+      liked: true,
+    });
+
+    await expect(
+      controller.setProductLiked(
+        { productId: PRODUCT.id },
+        { liked: true },
+        client,
+      ),
+    ).resolves.toEqual({ productId: PRODUCT.id, liked: true });
+    expect(products.setLiked).toHaveBeenCalledWith(
+      PRODUCT.id,
+      { liked: true },
+      client,
     );
   });
 

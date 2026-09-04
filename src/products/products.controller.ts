@@ -18,11 +18,13 @@ import { API_PREFIX } from '../bootstrap';
 import { ValidationProblemException } from '../common/problems';
 import {
   CreateProductRequest,
+  LikeUpdateRequest,
   ListProductsQuery,
   ProductIdParams,
   UpdateProductRequest,
 } from './products.dto';
 import {
+  LikeStateResponse,
   ProductDetailResponse,
   ProductPageResponse,
   ProductResponse,
@@ -80,5 +82,15 @@ export class ProductsController {
     }
 
     return this.products.update(productId, input);
+  }
+
+  @Patch(':productId/like')
+  @CheckAbilities({ action: 'update', subject: 'ProductLike' })
+  setProductLiked(
+    @Param() { productId }: ProductIdParams,
+    @Body() input: LikeUpdateRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<LikeStateResponse> {
+    return this.products.setLiked(productId, input, user);
   }
 }
