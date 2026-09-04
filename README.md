@@ -6,10 +6,10 @@ authentication, catalog, carts, orders and Stripe payments.
 
 [Open the API contract in Swagger Editor](https://editor.swagger.io/?url=https%3A%2F%2Fraw.githubusercontent.com%2FAlejandroq12%2Ftshirt-store-api%2Fdev%2Fapi%2Fopenapi.yaml).
 
-**24 of the 28 operations are built.** Authentication, products, SKUs, image
-uploads, likes, carts and orders. Image upload needs an S3 bucket and AWS
-credentials to run. Order history, payments and stock notifications are not
-written yet.
+**25 of the 28 operations are built.** Authentication, products, SKUs, image
+uploads, likes, carts, orders and order history. Image upload needs an S3 bucket
+and AWS credentials to run. Payments and stock notifications are not written
+yet.
 [Scope](#scope) lists both sides.
 
 ## Deployment
@@ -216,6 +216,7 @@ Built:
 - All seven authentication operations, with session revocation and email
 - Products and SKUs, with public reads
 - Image upload to S3, with content type and size checks
+- Orders and filtered client order history
 - CASL rules for manager writes on products, SKUs and images, order access,
   and clients managing their likes, cart and orders
 - Environment validation that stops the boot on a bad value
@@ -226,7 +227,7 @@ Built:
 
 Not built:
 
-- **Order history, payments and stock notifications.**
+- **Payments and stock notifications.**
 - **Anything beyond the 28 operations in the contract.** No health route, no
   `/docs` route, no admin views.
 - **The Redis consumer.** Redis runs in Compose because the stock-notification

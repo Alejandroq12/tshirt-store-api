@@ -14,11 +14,17 @@ import {
 } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
-import { PROBLEM_TYPE, ProblemException } from '../common/problems';
+import {
+  PROBLEM_TYPE,
+  ProblemException,
+  ValidationProblemException,
+} from '../common/problems';
 import type { EnvironmentVariables } from '../config/env.validation';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  ListMyOrdersQuery,
   ListOrdersQuery,
+  OrderStatusFilter,
   OrderStatusUpdate,
   OrderStatusUpdateRequest,
 } from './orders.dto';
@@ -57,6 +63,14 @@ const RESPONSE_STATUS = {
   [PrismaOrderStatus.SHIPPED]: 'shipped',
   [PrismaOrderStatus.CANCELLED]: 'cancelled',
 } as const satisfies Record<PrismaOrderStatus, string>;
+
+const PRISMA_STATUS = {
+  [OrderStatusFilter.PENDING]: PrismaOrderStatus.PENDING,
+  [OrderStatusFilter.PAID]: PrismaOrderStatus.PAID,
+  [OrderStatusFilter.PROCESSING]: PrismaOrderStatus.PROCESSING,
+  [OrderStatusFilter.SHIPPED]: PrismaOrderStatus.SHIPPED,
+  [OrderStatusFilter.CANCELLED]: PrismaOrderStatus.CANCELLED,
+} as const satisfies Record<OrderStatusFilter, PrismaOrderStatus>;
 
 const RESPONSE_PAYMENT_METHOD = {
   [PrismaPaymentMethod.PAYMENT_LINK]: 'payment_link',
@@ -204,6 +218,70 @@ export class OrdersService {
         include: ORDER_INCLUDE,
       }),
       this.prisma.order.count(),
+    ]);
+
+    return {
+      items: orders.map((order) => this.orderResponse(order)),
+      pagination: { limit: query.limit, offset: query.offset, total },
+    };
+  }
+
+  async listMine(
+    query: ListMyOrdersQuery,
+    user: AuthenticatedUser,
+  ): Promise<OrderPageResponse> {
+    if (user.role !== UserRole.CLIENT) throw new ForbiddenException();
+
+    const from = query.from === undefined ? undefined : new Date(query.from);
+    const to = query.to === undefined ? undefined : new Date(query.to);
+
+    if (from && to && from > to) {
+      throw new ValidationProblemException([
+        { field: 'to', message: 'Must not be earlier than from.' },
+      ]);
+    }
+    if (
+      query.minPrice !== undefined &&
+      query.maxPrice !== undefined &&
+      new Prisma.Decimal(query.minPrice).greaterThan(query.maxPrice)
+    ) {
+      throw new ValidationProblemException([
+        { field: 'maxPrice', message: 'Must not be less than minPrice.' },
+      ]);
+    }
+
+    const where: Prisma.OrderWhereInput = {
+      clientId: user.id,
+      ...(from || to
+        ? {
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+      ...(query.status === undefined
+        ? {}
+        : { status: PRISMA_STATUS[query.status] }),
+      ...(query.minPrice !== undefined || query.maxPrice !== undefined
+        ? {
+            totalAmount: {
+              ...(query.minPrice === undefined ? {} : { gte: query.minPrice }),
+              ...(query.maxPrice === undefined ? {} : { lte: query.maxPrice }),
+            },
+          }
+        : {}),
+    };
+
+    const [orders, total] = await this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: query.offset,
+        take: query.limit,
+        include: ORDER_INCLUDE,
+      }),
+      this.prisma.order.count({ where }),
     ]);
 
     return {

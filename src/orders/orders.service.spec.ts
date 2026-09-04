@@ -14,7 +14,11 @@ import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { PROBLEM_TYPE } from '../common/problems';
 import type { EnvironmentVariables } from '../config/env.validation';
 import type { PrismaService } from '../prisma/prisma.service';
-import { OrderStatusUpdate } from './orders.dto';
+import {
+  ListMyOrdersQuery,
+  OrderStatusFilter,
+  OrderStatusUpdate,
+} from './orders.dto';
 import { OrdersService } from './orders.service';
 
 const NOW = new Date('2026-09-03T12:00:00.000Z');
@@ -156,6 +160,9 @@ describe('OrdersService', () => {
   const service = new OrdersService(prisma, {
     get: () => 'USD',
   } as unknown as ConfigService<EnvironmentVariables, true>);
+  const historyQuery = (
+    overrides: Partial<ListMyOrdersQuery> = {},
+  ): ListMyOrdersQuery => ({ limit: 10, offset: 0, ...overrides });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -391,6 +398,175 @@ describe('OrdersService', () => {
       include: { items: { orderBy: { id: 'asc' } } },
     });
     expect(orderCount).toHaveBeenCalledWith();
+  });
+
+  it('lists every owned status in newest-first order and counts that page', async () => {
+    orderFindMany.mockResolvedValue([
+      orderFixture(PrismaOrderStatus.PENDING),
+      orderFixture(PrismaOrderStatus.CANCELLED),
+      orderFixture(PrismaOrderStatus.PAID),
+      orderFixture(PrismaOrderStatus.PROCESSING),
+      orderFixture(PrismaOrderStatus.SHIPPED),
+    ]);
+    orderCount.mockResolvedValue(5);
+
+    const response = await service.listMine(historyQuery(), CLIENT);
+
+    expect(response.items.map(({ status }) => status)).toEqual([
+      'pending',
+      'cancelled',
+      'paid',
+      'processing',
+      'shipped',
+    ]);
+    expect(response.pagination).toEqual({ limit: 10, offset: 0, total: 5 });
+    expect(orderFindMany).toHaveBeenCalledWith({
+      where: { clientId: CLIENT_ID },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: 0,
+      take: 10,
+      include: { items: { orderBy: { id: 'asc' } } },
+    });
+    expect(orderCount).toHaveBeenCalledWith({
+      where: { clientId: CLIENT_ID },
+    });
+  });
+
+  it.each<[string, Partial<ListMyOrdersQuery>, Prisma.OrderWhereInput]>([
+    [
+      'createdAt lower bound',
+      { from: '2026-09-01T00:00:00.000Z' },
+      { createdAt: { gte: new Date('2026-09-01T00:00:00.000Z') } },
+    ],
+    [
+      'createdAt upper bound',
+      { to: '2026-09-02T00:00:00.000Z' },
+      { createdAt: { lte: new Date('2026-09-02T00:00:00.000Z') } },
+    ],
+    [
+      'status',
+      { status: OrderStatusFilter.CANCELLED },
+      { status: PrismaOrderStatus.CANCELLED },
+    ],
+    [
+      'totalAmount lower bound',
+      { minPrice: '10.00' },
+      { totalAmount: { gte: '10.00' } },
+    ],
+    [
+      'totalAmount upper bound',
+      { maxPrice: '50.00' },
+      { totalAmount: { lte: '50.00' } },
+    ],
+  ])('filters by an inclusive %s', async (_name, query, filter) => {
+    await service.listMine(historyQuery(query), CLIENT);
+    const where = { clientId: CLIENT_ID, ...filter };
+
+    expect(orderFindMany).toHaveBeenCalledWith({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: 0,
+      take: 10,
+      include: { items: { orderBy: { id: 'asc' } } },
+    });
+    expect(orderCount).toHaveBeenCalledWith({ where });
+  });
+
+  it.each<[string, Partial<ListMyOrdersQuery>, Prisma.OrderWhereInput]>([
+    [
+      'date range and status',
+      {
+        from: '2026-09-01T00:00:00.000Z',
+        to: '2026-09-02T00:00:00.000Z',
+        status: OrderStatusFilter.PAID,
+      },
+      {
+        createdAt: {
+          gte: new Date('2026-09-01T00:00:00.000Z'),
+          lte: new Date('2026-09-02T00:00:00.000Z'),
+        },
+        status: PrismaOrderStatus.PAID,
+      },
+    ],
+    [
+      'price range and status',
+      {
+        minPrice: '10.00',
+        maxPrice: '50.00',
+        status: OrderStatusFilter.PROCESSING,
+      },
+      {
+        totalAmount: { gte: '10.00', lte: '50.00' },
+        status: PrismaOrderStatus.PROCESSING,
+      },
+    ],
+  ])('combines a %s', async (_name, query, filter) => {
+    await service.listMine(historyQuery(query), CLIENT);
+    const where = { clientId: CLIENT_ID, ...filter };
+
+    expect(orderFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where,
+      }),
+    );
+    expect(orderCount).toHaveBeenCalledWith({ where });
+  });
+
+  it.each([
+    [
+      'date',
+      {
+        from: '2026-09-02T00:00:00.000Z',
+        to: '2026-09-01T00:00:00.000Z',
+      },
+      'to',
+    ],
+    ['price', { minPrice: '50.00', maxPrice: '10.00' }, 'maxPrice'],
+  ] as const)('refuses an inverted %s range', async (_name, query, field) => {
+    await expect(
+      service.listMine(historyQuery(query), CLIENT),
+    ).rejects.toMatchObject({
+      problem: {
+        status: 422,
+        errors: [expect.objectContaining({ field })],
+      },
+    });
+    expect(orderFindMany).not.toHaveBeenCalled();
+    expect(orderCount).not.toHaveBeenCalled();
+  });
+
+  it('accepts equal date and price bounds', async () => {
+    const at = '2026-09-01T00:00:00.000Z';
+
+    await service.listMine(
+      historyQuery({
+        from: at,
+        to: at,
+        minPrice: '10.00',
+        maxPrice: '10.00',
+      }),
+      CLIENT,
+    );
+
+    const where = {
+      clientId: CLIENT_ID,
+      createdAt: { gte: new Date(at), lte: new Date(at) },
+      totalAmount: { gte: '10.00', lte: '10.00' },
+    };
+    expect(orderFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where,
+      }),
+    );
+    expect(orderCount).toHaveBeenCalledWith({ where });
+  });
+
+  it('refuses a manager before querying order history', async () => {
+    await expect(service.listMine(historyQuery(), MANAGER)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(orderFindMany).not.toHaveBeenCalled();
+    expect(orderCount).not.toHaveBeenCalled();
   });
 
   it('advances paid to processing for a manager', async () => {
