@@ -56,6 +56,9 @@ describe('the abilities each feature registers', () => {
     ['update', 'ProductSku'],
     ['create', 'ProductImage'],
   ];
+  const CLIENT_ACTIONS: Array<[AppAction, AppSubjects]> = [
+    ['update', 'ProductLike'],
+  ];
 
   it.each(MANAGER_ACTIONS)('lets a manager %s a %s', (action, subject) => {
     expect(can(MANAGER, action, subject)).toBe(true);
@@ -68,17 +71,24 @@ describe('the abilities each feature registers', () => {
     },
   );
 
+  it.each(CLIENT_ACTIONS)('lets a client %s a %s', (action, subject) => {
+    expect(can(CLIENT, action, subject)).toBe(true);
+  });
+
   it('grants a manager nothing beyond what a feature registered', () => {
     expect(can(MANAGER, 'delete', 'Product')).toBe(false);
     expect(can(MANAGER, 'delete', 'ProductSku')).toBe(false);
     expect(can(MANAGER, 'manage', 'Product')).toBe(false);
     expect(can(MANAGER, 'manage', 'all')).toBe(false);
+    expect(can(MANAGER, 'update', 'ProductLike')).toBe(false);
   });
 
-  it('grants a client nothing at all', () => {
-    const ability = abilities.createForUser(CLIENT);
-
-    expect(ability.rules).toHaveLength(0);
+  it('grants a client nothing beyond what a feature registered', () => {
+    expect(can(CLIENT, 'create', 'Product')).toBe(false);
+    expect(can(CLIENT, 'update', 'Product')).toBe(false);
+    expect(can(CLIENT, 'delete', 'ProductLike')).toBe(false);
+    expect(can(CLIENT, 'manage', 'all')).toBe(false);
+    expect(abilities.createForUser(CLIENT).rules).toHaveLength(1);
   });
 
   it('builds a fresh ability per caller, so roles never leak between them', () => {

@@ -62,8 +62,8 @@ jobs:
           display_report: true
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 20
-            --allowedTools "Read,Grep,Glob,Bash(git:*)"
+            --max-turns 40
+            --allowedTools "Read,Grep,Glob,Bash(git:*),Bash(npm run lint:api),mcp__tshirt-contract"
           prompt: |
             Review this pull request. It belongs to a training deliverable
             evaluated against fixed requirements, so unrequested scope is a
