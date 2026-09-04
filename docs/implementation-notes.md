@@ -155,13 +155,6 @@ applied, and disagree with it on the merits.
   too. The cost of the chosen design is the composite foreign key and the
   fallback resolution in `skus.service.ts`.
 
-### Still open
-
-- **Stripe identifiers.** `docs/db.dbml` still marks them as blueprint pending
-  the payments workshop, while the contract already describes the complete flow.
-  They are aligned when payments are implemented, which is where the concrete
-  shape stops being a guess.
-
 ## 6. Where each rule is documented
 
 | Looking for                                           | File                                                                                                                                        |
