@@ -82,36 +82,46 @@ commented-out block, a file that belongs in `.gitignore`.
 
 ## The pull-request description
 
+**Hard budget: 10 lines of prose, headings excluded. Shorter is better.** A long
+description is not thorough, it is unreviewed — the author has handed over their
+notes instead of deciding what matters. Cutting is the work.
+
 ```
 ## What
 
-One paragraph. What now works that did not before.
+One sentence. What now works that did not before.
 
 ## Requirement
 
-The quoted sentence from api/openapi.yaml (x-requirement), docs/architecture.md,
-docs/data-lifecycle.md or docs/implementation-notes.md that this serves. If the
-change is unanchored, say that plainly instead of inventing a justification.
+The quoted sentence that this serves, from api/openapi.yaml (x-requirement),
+docs/architecture.md, docs/data-lifecycle.md or docs/implementation-notes.md.
+One line. If the change is unanchored, say so plainly instead of inventing a
+justification.
 
 ## How
 
-The three or four decisions a reviewer needs. Not a file list.
+At most two bullets. A decision earns a line only if a competent reviewer would
+get it wrong without being told — not because it was hard to write. Merge
+related decisions into one bullet rather than listing them.
 
 ## Status codes
 
-For a new operation: every code the contract declares, and what produces it.
-Omit this section for anything else.
+New operations only, and one line: the codes and what produces each, separated by
+`·`. Omit the section entirely for anything else.
 
 ## Testing
 
-Which specs were added or changed, and what they assert. Then the result of the
-CI gate — actually run through /verify, or say explicitly that it was not run.
+One or two lines: the case count, the gate result, and anything verified outside
+the suite. Never claim a check that did not run — write "not run in this session".
 
 ## Not in this change
 
-Anything deliberately left out, and why. Scenarios noticed and not built belong
-here.
+At most two lines. What was deliberately left out, and why.
 ```
 
-Never claim a check passed that you did not run. If `/verify` has not been run
-in this session, write "not run in this session" rather than assuming.
+Cut in this order when over budget: how it works (the diff shows that), anything
+the reader can infer, anything true of every pull request in this repository,
+adjectives. Keep the decisions a reviewer would otherwise question, and the
+sentence that anchors the work.
+
+Never pad a section to fill it. If a section has nothing to say, delete it.
