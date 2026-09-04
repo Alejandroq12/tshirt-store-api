@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AuthModule } from './auth/auth.module';
 import { AuthorizationModule } from './authorization/authorization.module';
+import { CartModule } from './cart/cart.module';
 import { AppConfigModule } from './config/config.module';
 import { ImagesModule } from './images/images.module';
 import { LoggingModule } from './logging/logging.module';
@@ -21,6 +22,7 @@ import { SkusModule } from './skus/skus.module';
     ProductsModule,
     SkusModule,
     ImagesModule,
+    CartModule,
     RateLimitModule,
     MailModule,
   ],

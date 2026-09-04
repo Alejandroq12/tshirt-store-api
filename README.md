@@ -6,9 +6,9 @@ authentication, catalog, carts, orders and Stripe payments.
 
 [Open the API contract in Swagger Editor](https://editor.swagger.io/?url=https%3A%2F%2Fraw.githubusercontent.com%2FAlejandroq12%2Ftshirt-store-api%2Fdev%2Fapi%2Fopenapi.yaml).
 
-**16 of the 28 operations are built.** Authentication, products, SKUs, image
-uploads and likes. Image upload needs an S3 bucket and AWS credentials to run.
-Carts, orders, payments and stock notifications are not written yet.
+**20 of the 28 operations are built.** Authentication, products, SKUs, image
+uploads, likes and carts. Image upload needs an S3 bucket and AWS credentials
+to run. Orders, payments and stock notifications are not written yet.
 [Scope](#scope) lists both sides.
 
 ## Deployment
@@ -137,6 +137,7 @@ src/auth/              sign up, log in, sessions, password flows
 src/products/          the product catalog
 src/skus/              product variants
 src/images/            image uploads
+src/cart/              the client's cart and current-price totals
 src/authorization/     CASL abilities and the guard that checks them
 src/common/            problem+json types and the global exception filter
 src/config/            environment schema. A bad value stops the boot
@@ -213,8 +214,8 @@ Built:
 - All seven authentication operations, with session revocation and email
 - Products and SKUs, with public reads
 - Image upload to S3, with content type and size checks
-- CASL rules for manager writes on products, SKUs and images, and for a
-  client setting their own likes
+- CASL rules for manager writes on products, SKUs and images, and for clients
+  managing their likes and cart
 - Environment validation that stops the boot on a bad value
 - The global exception filter, the validation pipe and the `/v1` prefix
 - Helmet, CORS, and a rate limit on the password-reset flow
@@ -223,7 +224,7 @@ Built:
 
 Not built:
 
-- **Carts, orders, payments and stock notifications.**
+- **Orders, payments and stock notifications.**
 - **Anything beyond the 28 operations in the contract.** No health route, no
   `/docs` route, no admin views.
 - **The Redis consumer.** Redis runs in Compose because the stock-notification

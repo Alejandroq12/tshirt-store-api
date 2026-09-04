@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
+import { CartModule } from '../cart/cart.module';
 import { ImagesModule } from '../images/images.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsModule } from '../products/products.module';
@@ -31,7 +32,13 @@ describe('the abilities each feature registers', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [StubConfigModule, ProductsModule, SkusModule, ImagesModule],
+      imports: [
+        StubConfigModule,
+        ProductsModule,
+        SkusModule,
+        ImagesModule,
+        CartModule,
+      ],
     })
       .overrideProvider(PrismaService)
       .useValue({})
@@ -58,6 +65,7 @@ describe('the abilities each feature registers', () => {
   ];
   const CLIENT_ACTIONS: Array<[AppAction, AppSubjects]> = [
     ['update', 'ProductLike'],
+    ['manage', 'Cart'],
   ];
 
   it.each(MANAGER_ACTIONS)('lets a manager %s a %s', (action, subject) => {
@@ -81,14 +89,16 @@ describe('the abilities each feature registers', () => {
     expect(can(MANAGER, 'manage', 'Product')).toBe(false);
     expect(can(MANAGER, 'manage', 'all')).toBe(false);
     expect(can(MANAGER, 'update', 'ProductLike')).toBe(false);
+    expect(can(MANAGER, 'manage', 'Cart')).toBe(false);
   });
 
   it('grants a client nothing beyond what a feature registered', () => {
     expect(can(CLIENT, 'create', 'Product')).toBe(false);
     expect(can(CLIENT, 'update', 'Product')).toBe(false);
     expect(can(CLIENT, 'delete', 'ProductLike')).toBe(false);
+    expect(can(CLIENT, 'manage', 'CartItem')).toBe(false);
     expect(can(CLIENT, 'manage', 'all')).toBe(false);
-    expect(abilities.createForUser(CLIENT).rules).toHaveLength(1);
+    expect(abilities.createForUser(CLIENT).rules).toHaveLength(2);
   });
 
   it('builds a fresh ability per caller, so roles never leak between them', () => {
