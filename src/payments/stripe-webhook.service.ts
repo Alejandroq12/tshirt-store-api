@@ -228,8 +228,15 @@ export class StripeWebhookService {
     const session = event.data.object;
     const stripePaymentLinkId = referencedId(session.payment_link);
     const email = session.customer_details?.email ?? session.customer_email;
+    const chargedCents = session.amount_total;
 
-    if (session.payment_status !== 'paid' || !stripePaymentLinkId || !email) {
+    if (
+      session.payment_status !== 'paid' ||
+      !stripePaymentLinkId ||
+      !email ||
+      chargedCents === null ||
+      chargedCents <= 0
+    ) {
       throw processingError('Checkout Session is missing payment data');
     }
 
@@ -263,7 +270,13 @@ export class StripeWebhookService {
     const sku = inventory.get(link.skuId);
     if (!sku) throw processingError('Payment Link SKU was not found');
 
-    const totalAmount = sku.price.mul(link.quantity);
+    if (chargedCents % link.quantity !== 0) {
+      throw processingError('Checkout Session total is not a whole unit price');
+    }
+
+    const totalAmount = new Prisma.Decimal(chargedCents).div(100);
+    const unitPrice = new Prisma.Decimal(chargedCents / link.quantity).div(100);
+
     const order = await transaction.order.create({
       data: {
         clientId: client.id,
@@ -281,7 +294,7 @@ export class StripeWebhookService {
             skuCode: sku.skuCode,
             size: sku.size,
             color: sku.color,
-            unitPrice: sku.price,
+            unitPrice,
             quantity: link.quantity,
             lineTotal: totalAmount,
           },

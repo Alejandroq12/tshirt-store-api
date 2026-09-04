@@ -235,6 +235,11 @@ describe('Checkout and Stripe payments (e2e)', () => {
     });
     await expect(prisma.order.count()).resolves.toBe(0);
 
+    await prisma.productSku.update({
+      where: { id: sku.id },
+      data: { price: '30.00' },
+    });
+
     const event = {
       id: `evt_${randomUUID()}`,
       type: 'checkout.session.completed',
@@ -244,6 +249,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
           id: `cs_${randomUUID()}`,
           payment_link: 'plink_checkout',
           payment_status: 'paid',
+          amount_total: 5000,
           customer_details: { email: client.email.toUpperCase() },
         },
       },

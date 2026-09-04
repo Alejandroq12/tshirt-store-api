@@ -40,6 +40,7 @@ const checkoutEvent = {
       id: 'cs_1',
       payment_link: 'plink_1',
       payment_status: 'paid',
+      amount_total: 3998,
       customer_details: { email: 'client@example.com' },
       customer_email: null,
     },
@@ -424,6 +425,26 @@ describe('StripeWebhookService', () => {
     ).toBe(false);
     expect(cartItemUpdate).not.toHaveBeenCalled();
     expect(cartItemDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it('records what Stripe charged when the SKU price moved after link creation', async () => {
+    eventFindUnique.mockResolvedValue(storedEvent(checkoutEvent));
+    orderFindUnique.mockResolvedValue(null);
+    skuFindMany.mockResolvedValue([
+      { ...inventory[0], price: new Prisma.Decimal('30.00') },
+    ]);
+
+    await service.process(STORED_EVENT_ID);
+
+    const [{ data }] = orderCreate.mock.calls[0] as [
+      { data: { totalAmount: Prisma.Decimal; items: { create: unknown } } },
+    ];
+
+    expect(data.totalAmount).toEqual(new Prisma.Decimal('39.98'));
+    expect(data.items.create).toMatchObject({
+      unitPrice: new Prisma.Decimal('19.99'),
+      lineTotal: new Prisma.Decimal('39.98'),
+    });
   });
 
   it('leaves an unmatched Payment Link event pending', async () => {
