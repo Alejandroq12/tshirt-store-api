@@ -6,6 +6,8 @@ import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CartModule } from '../cart/cart.module';
 import { ImagesModule } from '../images/images.module';
 import { OrdersModule } from '../orders/orders.module';
+import { PaymentsModule } from '../payments/payments.module';
+import { StripeClient } from '../payments/stripe.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsModule } from '../products/products.module';
 import { S3StorageService } from '../storage/s3-storage.service';
@@ -40,11 +42,14 @@ describe('the abilities each feature registers', () => {
         ImagesModule,
         CartModule,
         OrdersModule,
+        PaymentsModule,
       ],
     })
       .overrideProvider(PrismaService)
       .useValue({})
       .overrideProvider(S3StorageService)
+      .useValue({})
+      .overrideProvider(StripeClient)
       .useValue({})
       .compile();
 
@@ -65,6 +70,7 @@ describe('the abilities each feature registers', () => {
     ['update', 'ProductSku'],
     ['create', 'ProductImage'],
     ['read', 'Order'],
+    ['create', 'PaymentLink'],
   ];
   const CLIENT_ACTIONS: Array<[AppAction, AppSubjects]> = [
     ['update', 'ProductLike'],
@@ -100,7 +106,7 @@ describe('the abilities each feature registers', () => {
     expect(can(MANAGER, 'update', 'ProductLike')).toBe(false);
     expect(can(MANAGER, 'manage', 'Cart')).toBe(false);
     expect(can(MANAGER, 'create', 'Order')).toBe(false);
-    expect(abilities.createForUser(MANAGER).rules).toHaveLength(7);
+    expect(abilities.createForUser(MANAGER).rules).toHaveLength(8);
   });
 
   it('grants a client nothing beyond what a feature registered', () => {
