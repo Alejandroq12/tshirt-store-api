@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CartModule } from '../cart/cart.module';
 import { ImagesModule } from '../images/images.module';
+import { OrdersModule } from '../orders/orders.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsModule } from '../products/products.module';
 import { S3StorageService } from '../storage/s3-storage.service';
@@ -38,6 +39,7 @@ describe('the abilities each feature registers', () => {
         SkusModule,
         ImagesModule,
         CartModule,
+        OrdersModule,
       ],
     })
       .overrideProvider(PrismaService)
@@ -62,10 +64,12 @@ describe('the abilities each feature registers', () => {
     ['create', 'ProductSku'],
     ['update', 'ProductSku'],
     ['create', 'ProductImage'],
+    ['read', 'Order'],
   ];
   const CLIENT_ACTIONS: Array<[AppAction, AppSubjects]> = [
     ['update', 'ProductLike'],
     ['manage', 'Cart'],
+    ['create', 'Order'],
   ];
 
   it.each(MANAGER_ACTIONS)('lets a manager %s a %s', (action, subject) => {
@@ -83,6 +87,11 @@ describe('the abilities each feature registers', () => {
     expect(can(CLIENT, action, subject)).toBe(true);
   });
 
+  it('lets both roles update an order', () => {
+    expect(can(MANAGER, 'update', 'Order')).toBe(true);
+    expect(can(CLIENT, 'update', 'Order')).toBe(true);
+  });
+
   it('grants a manager nothing beyond what a feature registered', () => {
     expect(can(MANAGER, 'delete', 'Product')).toBe(false);
     expect(can(MANAGER, 'delete', 'ProductSku')).toBe(false);
@@ -90,6 +99,8 @@ describe('the abilities each feature registers', () => {
     expect(can(MANAGER, 'manage', 'all')).toBe(false);
     expect(can(MANAGER, 'update', 'ProductLike')).toBe(false);
     expect(can(MANAGER, 'manage', 'Cart')).toBe(false);
+    expect(can(MANAGER, 'create', 'Order')).toBe(false);
+    expect(abilities.createForUser(MANAGER).rules).toHaveLength(7);
   });
 
   it('grants a client nothing beyond what a feature registered', () => {
@@ -97,8 +108,9 @@ describe('the abilities each feature registers', () => {
     expect(can(CLIENT, 'update', 'Product')).toBe(false);
     expect(can(CLIENT, 'delete', 'ProductLike')).toBe(false);
     expect(can(CLIENT, 'manage', 'CartItem')).toBe(false);
+    expect(can(CLIENT, 'read', 'Order')).toBe(false);
     expect(can(CLIENT, 'manage', 'all')).toBe(false);
-    expect(abilities.createForUser(CLIENT).rules).toHaveLength(2);
+    expect(abilities.createForUser(CLIENT).rules).toHaveLength(4);
   });
 
   it('builds a fresh ability per caller, so roles never leak between them', () => {
