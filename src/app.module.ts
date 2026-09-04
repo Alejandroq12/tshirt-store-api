@@ -7,6 +7,7 @@ import { AppConfigModule } from './config/config.module';
 import { ImagesModule } from './images/images.module';
 import { LoggingModule } from './logging/logging.module';
 import { MailModule } from './mail/mail.module';
+import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { RateLimitModule } from './security/rate-limit.module';
@@ -23,6 +24,7 @@ import { SkusModule } from './skus/skus.module';
     SkusModule,
     ImagesModule,
     CartModule,
+    OrdersModule,
     RateLimitModule,
     MailModule,
   ],

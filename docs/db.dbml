@@ -384,7 +384,7 @@ Table order_items {
     Product or SKU changes do not change old order lines.
 
     sku_id and product_id are NOT NULL and use RESTRICT.
-    Orders are not edited after creation.
+    Order item snapshots are not edited after creation.
 
     uq_order_sku keeps one line per SKU in an order.
 

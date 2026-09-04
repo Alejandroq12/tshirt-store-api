@@ -6,9 +6,10 @@ authentication, catalog, carts, orders and Stripe payments.
 
 [Open the API contract in Swagger Editor](https://editor.swagger.io/?url=https%3A%2F%2Fraw.githubusercontent.com%2FAlejandroq12%2Ftshirt-store-api%2Fdev%2Fapi%2Fopenapi.yaml).
 
-**20 of the 28 operations are built.** Authentication, products, SKUs, image
-uploads, likes and carts. Image upload needs an S3 bucket and AWS credentials
-to run. Orders, payments and stock notifications are not written yet.
+**24 of the 28 operations are built.** Authentication, products, SKUs, image
+uploads, likes, carts and orders. Image upload needs an S3 bucket and AWS
+credentials to run. Order history, payments and stock notifications are not
+written yet.
 [Scope](#scope) lists both sides.
 
 ## Deployment
@@ -138,6 +139,7 @@ src/products/          the product catalog
 src/skus/              product variants
 src/images/            image uploads
 src/cart/              the client's cart and current-price totals
+src/orders/            order snapshots and the core status lifecycle
 src/authorization/     CASL abilities and the guard that checks them
 src/common/            problem+json types and the global exception filter
 src/config/            environment schema. A bad value stops the boot
@@ -214,8 +216,8 @@ Built:
 - All seven authentication operations, with session revocation and email
 - Products and SKUs, with public reads
 - Image upload to S3, with content type and size checks
-- CASL rules for manager writes on products, SKUs and images, and for clients
-  managing their likes and cart
+- CASL rules for manager writes on products, SKUs and images, order access,
+  and clients managing their likes, cart and orders
 - Environment validation that stops the boot on a bad value
 - The global exception filter, the validation pipe and the `/v1` prefix
 - Helmet, CORS, and a rate limit on the password-reset flow
@@ -224,7 +226,7 @@ Built:
 
 Not built:
 
-- **Orders, payments and stock notifications.**
+- **Order history, payments and stock notifications.**
 - **Anything beyond the 28 operations in the contract.** No health route, no
   `/docs` route, no admin views.
 - **The Redis consumer.** Redis runs in Compose because the stock-notification
@@ -303,6 +305,13 @@ something broken.
   line that serves nothing today. Validating the whole environment at once is
   what makes a bad value fail the boot instead of the first request that needed
   it, and splitting the schema per feature was judged not worth that trade.
+- **Page size has no upper bound.** The contract's `limit` parameter is
+  `minimum: 1` with no `maximum`, so `GET /products?limit=1000000` and
+  `GET /orders?limit=1000000` are requests the delivered contract accepts, and
+  the service loads that page — orders with all of their items. A cap would be
+  the obvious hardening, and it is deliberately absent: adding one would make the
+  API answer 422 to a request the contract permits, which is a contract break
+  rather than a fix. The place to solve it is the contract, not the DTO.
 - **The rate limit counts per instance.** The throttler keeps its counters in
   memory, so running more than one instance multiplies the effective limit. A
   shared counter belongs on the Redis that Compose already runs, and arrives
