@@ -11,6 +11,10 @@ import {
 
 const AMOUNT_PATTERN = /^(0|[1-9]\d{0,7})\.\d{2}$/;
 
+const ISO_DATE_TIME = { strict: true, strictSeparator: true } as const;
+
+const REQUIRES_TIME_OF_DAY = /T/;
+
 export enum OrderStatusFilter {
   PENDING = 'pending',
   PAID = 'paid',
@@ -44,11 +48,17 @@ export class ListOrdersQuery {
 
 export class ListMyOrdersQuery extends ListOrdersQuery {
   @IsOptional()
-  @IsISO8601()
+  @IsISO8601(ISO_DATE_TIME)
+  @Matches(REQUIRES_TIME_OF_DAY, {
+    message: '$property must be a date-time, not a date.',
+  })
   from?: string;
 
   @IsOptional()
-  @IsISO8601()
+  @IsISO8601(ISO_DATE_TIME)
+  @Matches(REQUIRES_TIME_OF_DAY, {
+    message: '$property must be a date-time, not a date.',
+  })
   to?: string;
 
   @IsOptional()

@@ -194,7 +194,7 @@ describe('Order history (e2e)', () => {
     await history(clientToken).expect(422);
   });
 
-  it('includes equal bounds and rejects an inverted range', async () => {
+  it('includes equal bounds and rejects malformed or inverted ranges', async () => {
     const client = await createClient(prisma);
     const token = await login(client);
     const { product, sku } = await createProductWithSku(prisma);
@@ -238,5 +238,25 @@ describe('Order history (e2e)', () => {
       status: 422,
       errors: [{ field: 'to' }],
     });
+
+    for (const impossible of [
+      '2026-02-30T00:00:00.000Z',
+      '2026-02-29T00:00:00.000Z',
+    ]) {
+      await history(token)
+        .query({ limit: 10, offset: 0, from: impossible })
+        .expect(422);
+    }
+
+    await history(token)
+      .query({ limit: 10, offset: 0, to: '2026-09-02' })
+      .expect(422);
+
+    const stillValid = await history(token)
+      .query({ limit: 10, offset: 0, to: '2026-09-02T23:59:59.000Z' })
+      .expect(200);
+    expect(
+      (stillValid.body as OrderPageResponse).items.map(({ id }) => id),
+    ).toEqual([order.id]);
   });
 });
