@@ -305,6 +305,13 @@ something broken.
   line that serves nothing today. Validating the whole environment at once is
   what makes a bad value fail the boot instead of the first request that needed
   it, and splitting the schema per feature was judged not worth that trade.
+- **Page size has no upper bound.** The contract's `limit` parameter is
+  `minimum: 1` with no `maximum`, so `GET /products?limit=1000000` and
+  `GET /orders?limit=1000000` are requests the delivered contract accepts, and
+  the service loads that page — orders with all of their items. A cap would be
+  the obvious hardening, and it is deliberately absent: adding one would make the
+  API answer 422 to a request the contract permits, which is a contract break
+  rather than a fix. The place to solve it is the contract, not the DTO.
 - **The rate limit counts per instance.** The throttler keeps its counters in
   memory, so running more than one instance multiplies the effective limit. A
   shared counter belongs on the Redis that Compose already runs, and arrives
