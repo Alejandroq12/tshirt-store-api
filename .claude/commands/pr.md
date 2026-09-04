@@ -86,7 +86,7 @@ commented-out block, a file that belongs in `.gitignore`.
 description is not thorough, it is unreviewed — the author has handed over their
 notes instead of deciding what matters. Cutting is the work.
 
-```
+```markdown
 ## What
 
 One sentence. What now works that did not before.
