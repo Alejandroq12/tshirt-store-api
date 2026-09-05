@@ -34,7 +34,8 @@ describe('ReconciliationProducer', () => {
   });
 
   it('registers one deterministic scheduled scan', async () => {
-    await producer.onApplicationBootstrap();
+    producer.onApplicationBootstrap();
+    await settle();
 
     expect(upsertJobScheduler).toHaveBeenCalledWith(
       RECONCILIATION_SCHEDULER_ID,
@@ -47,16 +48,24 @@ describe('ReconciliationProducer', () => {
     );
   });
 
+  it('returns from bootstrap without waiting for Redis', () => {
+    upsertJobScheduler.mockReturnValue(new Promise(() => undefined));
+
+    expect(producer.onApplicationBootstrap()).toBeUndefined();
+  });
+
   it('does not fail application bootstrap when Redis is temporarily unavailable', async () => {
     upsertJobScheduler.mockRejectedValue(new Error('Redis unavailable'));
 
-    await expect(producer.onApplicationBootstrap()).resolves.toBeUndefined();
+    producer.onApplicationBootstrap();
+
+    await expect(settle()).resolves.toBeUndefined();
   });
 
   it('registers the scan again once Redis becomes ready', async () => {
     upsertJobScheduler.mockRejectedValueOnce(new Error('Redis unavailable'));
 
-    await producer.onApplicationBootstrap();
+    producer.onApplicationBootstrap();
     await settle();
 
     expect(on).toHaveBeenCalledWith('ready', expect.any(Function));

@@ -23,9 +23,9 @@ export class ReconciliationProducer implements OnApplicationBootstrap {
     private readonly queue: Queue<ReconciliationJob>,
   ) {}
 
-  async onApplicationBootstrap(): Promise<void> {
+  onApplicationBootstrap(): void {
     void this.followRedis();
-    await this.registerSchedule();
+    void this.registerSchedule();
   }
 
   private async followRedis(): Promise<void> {

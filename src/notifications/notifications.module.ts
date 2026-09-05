@@ -18,10 +18,19 @@ import { StockNotificationWorker } from './stock-notification.worker';
   imports: [
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvironmentVariables, true>) => ({
-        connection: { url: config.get('REDIS_URL', { infer: true }) },
-        prefix: `{tshirt-${config.get('NODE_ENV', { infer: true })}}`,
-      }),
+      useFactory: (config: ConfigService<EnvironmentVariables, true>) => {
+        const url = config.get('REDIS_URL', { infer: true });
+
+        return {
+          connection: {
+            url,
+            ...(url.startsWith('rediss://')
+              ? { tls: { rejectUnauthorized: false } }
+              : {}),
+          },
+          prefix: `{tshirt-${config.get('NODE_ENV', { infer: true })}}`,
+        };
+      },
     }),
     BullModule.registerQueue(
       { name: STOCK_NOTIFICATION_QUEUE },
