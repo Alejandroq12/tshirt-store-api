@@ -8,7 +8,11 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import Stripe from 'stripe';
 
-import { STOCK_NOTIFICATION_QUEUE } from '../src/notifications/stock-notification.queue';
+import {
+  RECONCILIATION_QUEUE,
+  SCAN_PENDING_JOB,
+  STOCK_NOTIFICATION_QUEUE,
+} from '../src/notifications/stock-notification.queue';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';
@@ -129,10 +133,83 @@ describe('Checkout and Stripe payments (e2e)', () => {
     throw new Error(`Expected ${expected} sent stock notifications`);
   };
 
+  const waitForProcessedEvent = async (stripeEventId: string) => {
+    for (let attempt = 0; attempt < 400; attempt += 1) {
+      const event = await prisma.stripeWebhookEvent.findUnique({
+        where: { stripeEventId },
+      });
+      if (event?.processedAt) return event;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    throw new Error(`Expected Stripe event ${stripeEventId} to be processed`);
+  };
+
   it('isolates BullMQ keys from development', () => {
     const queue = app.get<Queue>(getQueueToken(STOCK_NOTIFICATION_QUEUE));
 
     expect(queue.opts.prefix).toBe('{tshirt-test}');
+  });
+
+  it('recovers a pending Stripe event through the registered BullMQ consumer', async () => {
+    const client = await createClient(prisma);
+    const token = await login(client);
+    const { sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      stockQuantity: 10,
+    });
+
+    await request(app.getHttpServer())
+      .post('/v1/me/cart/items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ skuId: sku.id, quantity: 2 })
+      .expect(201);
+    const orderResponse = await request(app.getHttpServer())
+      .post('/v1/orders')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+    const orderId = (orderResponse.body as CreatedOrderBody).id;
+    await request(app.getHttpServer())
+      .post('/v1/payment-intents')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ orderId })
+      .expect(201);
+
+    const event = paymentIntentEvent(orderId, 'pi_checkout');
+    const pending = await prisma.stripeWebhookEvent.create({
+      data: {
+        stripeEventId: event.id,
+        eventType: event.type,
+        payload: event,
+      },
+    });
+    expect(pending.processedAt).toBeNull();
+
+    const queue = app.get<Queue<Record<string, never>>>(
+      getQueueToken(RECONCILIATION_QUEUE),
+    );
+    await queue.add(
+      SCAN_PENDING_JOB,
+      {},
+      {
+        jobId: `scan-${randomUUID()}`,
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+
+    const processed = await waitForProcessedEvent(event.id);
+    expect(processed).toMatchObject({
+      orderId,
+      errorMessage: null,
+    });
+    expect(processed.processedAt).toBeInstanceOf(Date);
+    await expect(
+      prisma.order.findUniqueOrThrow({ where: { id: orderId } }),
+    ).resolves.toMatchObject({ status: OrderStatus.PAID });
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 8 });
   });
 
   it('runs cart to order to Payment Intent to one idempotent stock decrement', async () => {
