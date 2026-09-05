@@ -7,10 +7,9 @@ authentication, catalog, carts, orders and Stripe payments.
 [Open the API contract in Swagger Editor](https://editor.swagger.io/?url=https%3A%2F%2Fraw.githubusercontent.com%2FAlejandroq12%2Ftshirt-store-api%2Fdev%2Fapi%2Fopenapi.yaml).
 
 **All 28 HTTP operations are built.** Authentication, products, SKUs, image
-uploads, likes, carts, orders, order history and both Stripe payment paths.
-Image upload needs an S3 bucket and AWS credentials to run. The queue-based
-stock-notification workflow remains separate work because it adds no HTTP
-operation.
+uploads, likes, carts, orders, order history and both Stripe payment paths are
+implemented, together with the required BullMQ stock-notification workflow.
+Image upload needs an S3 bucket and AWS credentials to run.
 [Scope](#scope) lists both sides.
 
 ## Deployment
@@ -99,8 +98,8 @@ Two things worth knowing before they surprise you:
   feed it; an instance role or a shared credentials file works as well, and
   `AWS_SESSION_TOKEN` is honoured by that chain even though the application
   never reads it by name. It is in the log redaction list for that reason.
-- **The Stripe settings configure the payments module.** The Redis URL is
-  validated at boot but is not read until the stock-notification queue is built.
+- **The Stripe settings configure the payments module.** `REDIS_URL` connects
+  BullMQ to the queue used by stock notifications and webhook reconciliation.
   Production additionally refuses to start when a secret still holds the value
   published in a template.
 
@@ -149,6 +148,7 @@ src/images/            image uploads
 src/cart/              the client's cart and current-price totals
 src/orders/            order snapshots and the core status lifecycle
 src/payments/          Stripe links, intents and signed webhook processing
+src/notifications/     stock cycles, BullMQ jobs and reconciliation
 src/authorization/     CASL abilities and the guard that checks them
 src/common/            problem+json types and the global exception filter
 src/config/            environment schema. A bad value stops the boot
@@ -180,13 +180,13 @@ delivered.
 
 ## Database
 
-`prisma migrate` creates 16 tables and 21 foreign keys. Three things Prisma
-cannot write live in a second migration that runs after it: 18 CHECK
-constraints, 7 partial indexes, and the trigger that blocks any physical
-`DELETE` on `products`.
+`prisma migrate` creates 16 tables and 21 foreign keys. Hand-written migrations
+add the features Prisma cannot express: 18 CHECK constraints, 8 partial
+indexes, and the trigger that blocks any physical `DELETE` on `products`.
 
 ```
 prisma/migrations/20260828002527_constraints/migration.sql
+prisma/migrations/20260905000000_stock_notification_outbox/migration.sql
 ```
 
 Check them after migrating:
@@ -194,7 +194,7 @@ Check them after migrating:
 ```sql
 SELECT count(*) FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
   WHERE n.nspname = 'public' AND c.contype = 'c';    -- 18
-SELECT count(*) FROM pg_index WHERE indpred IS NOT NULL;    -- 7
+SELECT count(*) FROM pg_index WHERE indpred IS NOT NULL;    -- 8
 SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal;     -- 1
 ```
 
@@ -227,6 +227,7 @@ Built:
 - Image upload to S3, with content type and size checks
 - Orders and filtered client order history
 - Stripe Payment Links, Payment Intents and idempotent signed webhooks
+- BullMQ stock notifications and scheduled webhook reconciliation
 - CASL rules for manager writes on products, SKUs and images, order access,
   and clients managing their likes, cart and orders
 - Environment validation that stops the boot on a bad value
@@ -237,12 +238,8 @@ Built:
 
 Not built:
 
-- **Stock notifications.**
 - **Anything beyond the 28 operations in the contract.** No health route, no
   `/docs` route, no admin views.
-- **The Redis consumer.** Redis runs in Compose because the stock-notification
-  job needs a queue. That section also adds the scheduled producer that retries
-  webhook events whose durable processing is still pending.
 
 ## Where the requirements needed interpretation
 
@@ -306,11 +303,15 @@ something broken.
   dependency graph, because `prisma` is an optional peer of `@prisma/client`.
   The only remaining fix is downgrading to `prisma@6.12`, which npm flags as
   breaking. The real fix is tracked upstream.
-- **The boot demands one configuration value nothing reads yet.** `REDIS_URL`
-  has to be well-formed although no code path consumes it until the queue is
-  built. The check is on shape, not connectivity. Validating the whole
-  environment at once makes a bad value fail at boot; splitting the schema for
-  this one deferred integration was judged not worth the trade.
+- **Stock-notification email delivery is at least once.** PostgreSQL records a
+  pending notification before BullMQ receives its id, so a Redis outage cannot
+  lose the email. If a worker sends the email and dies before recording
+  `sent_at`, reconciliation sends it again. Marking it first would trade a
+  possible duplicate for a permanently lost required notification.
+- **Reconciliation has no dead-letter cutoff.** The requirement is to retry
+  every Stripe event whose `processed_at` is null. A permanently invalid event
+  therefore remains pending and requires operator intervention; applying an age
+  limit could also abandon a recoverable payment.
 - **Page size has no upper bound.** The contract's `limit` parameter is
   `minimum: 1` with no `maximum`, so `GET /products?limit=1000000` and
   `GET /orders?limit=1000000` are requests the delivered contract accepts, and
@@ -320,17 +321,18 @@ something broken.
   rather than a fix. The place to solve it is the contract, not the DTO.
 - **The rate limit counts per instance.** The throttler keeps its counters in
   memory, so running more than one instance multiplies the effective limit. A
-  shared counter belongs on the Redis that Compose already runs, and arrives
-  with the queue.
+  shared counter would require a Redis-backed throttler store; the stock queue
+  does not change this limitation.
 - **A failed insert can leave an active Payment Link with no local row.**
   `POST /payment-links` creates the link at Stripe before storing it, so a
   database failure in that window leaves a live, payable URL the API never
   returned. Paying it produces a signed event that matches no `payment_links`
   row, which the webhook stores unprocessed with its error and answers 204 —
-  the money is captured and visible, not lost. Recovery is an operator reading
-  `stripe_webhook_events` until the queue section adds the producer that
-  reprocesses `processed_at IS NULL`. Deactivating the link in a compensating
-  catch would narrow the window, not close it, because that call can fail too.
+  the money is captured and visible, not lost. The scheduled reconciliation
+  producer retries events with `processed_at IS NULL`; an operator still has to
+  repair the missing local link before this particular event can succeed.
+  Deactivating the link in a compensating catch would narrow the window, not
+  close it, because that call can fail too.
 - **`STORE_CURRENCY` is only correct for two-decimal currencies.** Amounts
   reach Stripe as `value × 100`, which is wrong for a zero-decimal currency
   such as JPY. The contract permits any ISO code in `Currency` but its `Amount`

@@ -44,6 +44,10 @@ rather than the Prisma schema:
 The directory timestamps guarantee the order: `..._init` first, followed by
 `..._constraints`. `prisma migrate deploy` applies them in that order.
 
+The later `20260905000000_stock_notification_outbox` migration makes
+`stock_at_send` and `sent_at` nullable while an email is pending and adds the
+eighth partial index, `idx_stock_notice_pending`.
+
 ### Composite foreign keys in Prisma
 
 `sku_image_assignments` and `order_items` use composite foreign keys. Prisma
@@ -161,7 +165,7 @@ applied, and disagree with it on the merits.
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Routes, schemas, status codes, and examples           | [openapi.yaml](../api/openapi.yaml)                                                                                                         |
 | Tables, columns, relationships, and indexes           | [db.dbml](db.dbml)                                                                                                                          |
-| CHECK constraints, partial indexes, and trigger       | [`prisma/migrations/20260828002527_constraints/migration.sql`](../prisma/migrations/20260828002527_constraints/migration.sql)             |
+| CHECK constraints, partial indexes, and trigger       | [`prisma/migrations`](../prisma/migrations)                                                                                                  |
 | States, deletion, stock, sessions, and notifications  | [data-lifecycle.md](data-lifecycle.md)                                                                                                      |
 | Internal flows, locks, queue, and monitoring          | [architecture.md](architecture.md)                                                                                                          |
 | Decisions made here rather than stated in a requirement | Section 5 of this file                                                                                                                       |
