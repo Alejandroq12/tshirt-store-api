@@ -2,6 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import { ListMyOrdersQuery } from './orders.dto';
 import { OrderPageResponse, OrdersService } from './orders.service';
 
@@ -10,6 +11,7 @@ export class MyOrdersController {
   constructor(private readonly orders: OrdersService) {}
 
   @Get()
+  @CheckAbilities({ action: 'list', subject: 'Order' })
   listMyOrders(
     @Query() query: ListMyOrdersQuery,
     @CurrentUser() user: AuthenticatedUser,

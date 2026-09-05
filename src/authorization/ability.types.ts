@@ -21,7 +21,8 @@ import type {
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 
-export type AppAction = 'manage' | 'create' | 'read' | 'update' | 'delete';
+export type AppAction =
+  'manage' | 'create' | 'read' | 'list' | 'update' | 'delete';
 
 export type AppSubjects =
   | 'all'

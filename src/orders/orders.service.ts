@@ -234,8 +234,6 @@ export class OrdersService {
     query: ListMyOrdersQuery,
     user: AuthenticatedUser,
   ): Promise<OrderPageResponse> {
-    if (user.role !== UserRole.CLIENT) throw new ForbiddenException();
-
     const from = query.from === undefined ? undefined : new Date(query.from);
     const to = query.to === undefined ? undefined : new Date(query.to);
 

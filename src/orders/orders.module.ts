@@ -17,6 +17,7 @@ class OrdersAbilityRegistrar implements OnModuleInit {
     this.abilities.register((user, { can }) => {
       if (user.role === UserRole.CLIENT) {
         can('create', 'Order');
+        can('list', 'Order');
         can('update', 'Order');
         return;
       }
