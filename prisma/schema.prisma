@@ -301,12 +301,12 @@ model StripeWebhookEvent {
 }
 
 model StockNotification {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  clientId      String   @map("client_id") @db.Uuid
-  productId     String   @map("product_id") @db.Uuid
-  lowStockCycle Int      @map("low_stock_cycle")
-  stockAtSend   Int      @map("stock_at_send")
-  sentAt        DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId      String    @map("client_id") @db.Uuid
+  productId     String    @map("product_id") @db.Uuid
+  lowStockCycle Int       @map("low_stock_cycle")
+  stockAtSend   Int?      @map("stock_at_send")
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(6)
 
   client  User    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
