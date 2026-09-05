@@ -357,6 +357,6 @@ something broken.
 | -------------------------------------------------------------- | ----------------------------------------------------- |
 | [`docs/db.dbml`](docs/db.dbml)                                 | The data model: 16 tables, 21 foreign keys            |
 | [`docs/data-lifecycle.md`](docs/data-lifecycle.md)             | States, deletion, stock, sessions, notifications      |
-| [`docs/architecture.md`](docs/architecture.md)                 | Internal flows, lock order, queue design, monitoring  |
+| [`docs/architecture.md`](docs/architecture.md)                 | Production diagram, deployment, queue, monitoring     |
 | [`docs/implementation-notes.md`](docs/implementation-notes.md) | What the database guarantees, and what only code does |
 | [`docs/agentic-workflow.md`](docs/agentic-workflow.md)         | How the repository is worked on with Claude Code      |

@@ -7,6 +7,7 @@ import {
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
+import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { MyOrdersController } from './my-orders.controller';
 import { OrderStatusFilter } from './orders.dto';
 import type { OrdersService } from './orders.service';
@@ -47,7 +48,7 @@ describe('MyOrdersController', () => {
     expect(orders.listMine).toHaveBeenCalledWith(query, client);
   });
 
-  it('uses the contract route without misleading ability metadata', () => {
+  it('uses the contract route and requires the client history ability', () => {
     const target = methodTarget();
 
     expect(Reflect.getMetadata(PATH_METADATA, MyOrdersController)).toBe(
@@ -57,7 +58,11 @@ describe('MyOrdersController', () => {
     expect(Reflect.getMetadata(METHOD_METADATA, target)).toBe(
       RequestMethod.GET,
     );
-    expect(Reflect.getMetadata(REQUIRED_ABILITIES, target)).toBeUndefined();
-    expect(Reflect.getMetadata(GUARDS_METADATA, target)).toBeUndefined();
+    expect(Reflect.getMetadata(REQUIRED_ABILITIES, target)).toEqual([
+      { action: 'list', subject: 'Order' },
+    ]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, target)).toContain(
+      AbilitiesGuard,
+    );
   });
 });

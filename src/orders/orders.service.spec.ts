@@ -576,14 +576,6 @@ describe('OrdersService', () => {
     expect(orderCount).toHaveBeenCalledWith({ where });
   });
 
-  it('refuses a manager before querying order history', async () => {
-    await expect(service.listMine(historyQuery(), MANAGER)).rejects.toThrow(
-      ForbiddenException,
-    );
-    expect(orderFindMany).not.toHaveBeenCalled();
-    expect(orderCount).not.toHaveBeenCalled();
-  });
-
   it('advances paid to processing for a manager', async () => {
     orderFindFirst.mockResolvedValue(orderFixture(PrismaOrderStatus.PAID));
     orderFindUniqueOrThrow.mockResolvedValue(
