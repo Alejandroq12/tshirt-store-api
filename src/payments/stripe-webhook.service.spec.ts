@@ -4,6 +4,8 @@ import { OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 import type Stripe from 'stripe';
 
 import type { EnvironmentVariables } from '../config/env.validation';
+import type { StockCycleService } from '../notifications/stock-cycle.service';
+import type { StockNotificationProducer } from '../notifications/stock-notification.producer';
 import type { PrismaService } from '../prisma/prisma.service';
 import { StripeWebhookService } from './stripe-webhook.service';
 import type { StripeClient } from './stripe.client';
@@ -117,6 +119,9 @@ describe('StripeWebhookService', () => {
   const queryRaw = jest.fn();
   const transaction = jest.fn();
   const constructEvent = jest.fn();
+  const totalStock = jest.fn();
+  const evaluateStockCycle = jest.fn();
+  const enqueueNotifications = jest.fn();
   let lockedCartItems: LockedCartFixture[];
 
   interface LockedCartFixture {
@@ -159,9 +164,22 @@ describe('StripeWebhookService', () => {
     $transaction: transaction,
   } as unknown as PrismaService;
   const stripe = { constructEvent } as unknown as StripeClient;
-  const service = new StripeWebhookService(prisma, stripe, {
-    get: () => 'whsec_test',
-  } as unknown as ConfigService<EnvironmentVariables, true>);
+  const stockCycle = {
+    totalStock,
+    evaluate: evaluateStockCycle,
+  } as unknown as StockCycleService;
+  const notifications = {
+    enqueue: enqueueNotifications,
+  } as unknown as StockNotificationProducer;
+  const service = new StripeWebhookService(
+    prisma,
+    stripe,
+    stockCycle,
+    notifications,
+    {
+      get: () => 'whsec_test',
+    } as unknown as ConfigService<EnvironmentVariables, true>,
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -197,6 +215,9 @@ describe('StripeWebhookService', () => {
     cartItemUpdate.mockResolvedValue({ id: 'cart-item' });
     cartItemDeleteMany.mockResolvedValue({ count: 1 });
     constructEvent.mockReturnValue(paymentIntentEvent);
+    totalStock.mockResolvedValue(10);
+    evaluateStockCycle.mockResolvedValue([]);
+    enqueueNotifications.mockResolvedValue(undefined);
   });
 
   it('returns 400 for a missing or invalid signature without storing an event', async () => {
@@ -314,6 +335,41 @@ describe('StripeWebhookService', () => {
     expect(eventUpdateOutside).not.toHaveBeenCalled();
   });
 
+  it('evaluates aggregate stock in the webhook transaction and enqueues after commit', async () => {
+    totalStock
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(7);
+    evaluateStockCycle
+      .mockResolvedValueOnce(['notification-id'])
+      .mockResolvedValueOnce([]);
+
+    await service.process(STORED_EVENT_ID);
+
+    expect(evaluateStockCycle).toHaveBeenNthCalledWith(
+      1,
+      transactionClient,
+      PRODUCT_B_ID,
+      5,
+      2,
+    );
+    expect(evaluateStockCycle).toHaveBeenNthCalledWith(
+      2,
+      transactionClient,
+      PRODUCT_A_ID,
+      8,
+      7,
+    );
+    expect(orderUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      evaluateStockCycle.mock.invocationCallOrder[0],
+    );
+    expect(eventUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+      enqueueNotifications.mock.invocationCallOrder[0],
+    );
+    expect(enqueueNotifications).toHaveBeenCalledWith(['notification-id']);
+  });
+
   it('refuses a succeeded intent that is not the one stored on the order', async () => {
     orderFindUnique.mockResolvedValue({
       ...intentOrder,
@@ -425,6 +481,9 @@ describe('StripeWebhookService', () => {
     ).toBe(false);
     expect(cartItemUpdate).not.toHaveBeenCalled();
     expect(cartItemDeleteMany).not.toHaveBeenCalled();
+    expect(orderCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      evaluateStockCycle.mock.invocationCallOrder[0],
+    );
   });
 
   it('records what Stripe charged when the SKU price moved after link creation', async () => {

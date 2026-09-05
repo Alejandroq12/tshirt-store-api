@@ -3,6 +3,8 @@ import { UserRole } from '@prisma/client';
 
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { CaslAbilityFactory } from '../authorization/casl-ability.factory';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { ReconciliationWorker } from '../notifications/reconciliation.worker';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PaymentIntentsController } from './payment-intents.controller';
 import { PaymentLinksController } from './payment-links.controller';
@@ -23,7 +25,7 @@ class PaymentsAbilityRegistrar implements OnModuleInit {
 }
 
 @Module({
-  imports: [AuthorizationModule, PrismaModule],
+  imports: [AuthorizationModule, NotificationsModule, PrismaModule],
   controllers: [
     PaymentLinksController,
     PaymentIntentsController,
@@ -33,6 +35,7 @@ class PaymentsAbilityRegistrar implements OnModuleInit {
     PaymentsService,
     StripeWebhookService,
     StripeClient,
+    ReconciliationWorker,
     PaymentsAbilityRegistrar,
   ],
   exports: [StripeWebhookService],

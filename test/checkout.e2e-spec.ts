@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
+import { getQueueToken } from '@nestjs/bullmq';
 import { INestApplication } from '@nestjs/common';
 import { OrderStatus, PaymentMethod, type User } from '@prisma/client';
+import type { Queue } from 'bullmq';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import Stripe from 'stripe';
 
+import { STOCK_NOTIFICATION_QUEUE } from '../src/notifications/stock-notification.queue';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';
@@ -36,6 +39,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
   const signer = new Stripe('sk_test_signature_only');
   const createPaymentLink = jest.fn();
   const createPaymentIntent = jest.fn();
+  const sendMail = jest.fn();
   const constructEvent = jest.fn(
     (payload: Buffer, signature: string, secret: string) =>
       signer.webhooks.constructEvent(payload, signature, secret),
@@ -45,6 +49,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
 
   beforeAll(async () => {
     app = (await createTestApp({
+      mail: { send: sendMail },
       stripe: { createPaymentLink, createPaymentIntent, constructEvent },
     })) as INestApplication<App>;
     prisma = app.get(PrismaService);
@@ -61,6 +66,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       id: 'pi_checkout',
       client_secret: 'pi_checkout_secret_test',
     });
+    sendMail.mockResolvedValue(undefined);
   });
 
   afterAll(async () => {
@@ -104,6 +110,29 @@ describe('Checkout and Stripe payments (e2e)', () => {
         metadata: { orderId },
       },
     },
+  });
+
+  const waitForSentNotifications = async (expected: number) => {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const notifications = await prisma.stockNotification.findMany({
+        orderBy: [{ lowStockCycle: 'asc' }, { clientId: 'asc' }],
+      });
+      if (
+        notifications.length === expected &&
+        notifications.every(({ sentAt }) => sentAt !== null)
+      ) {
+        return notifications;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    throw new Error(`Expected ${expected} sent stock notifications`);
+  };
+
+  it('isolates BullMQ keys from development', () => {
+    const queue = app.get<Queue>(getQueueToken(STOCK_NOTIFICATION_QUEUE));
+
+    expect(queue.opts.prefix).toBe('{tshirt-test}');
   });
 
   it('runs cart to order to Payment Intent to one idempotent stock decrement', async () => {
@@ -203,6 +232,110 @@ describe('Checkout and Stripe payments (e2e)', () => {
         where: { cart: { clientId: client.id }, skuId: sku.id },
       }),
     ).resolves.toMatchObject({ quantity: 3 });
+  });
+
+  it('delivers one queued email per eligible client and low-stock cycle', async () => {
+    const manager = await createManager(prisma);
+    const buyer = await createClient(prisma, { email: 'buyer@example.com' });
+    const interested = await createClient(prisma, {
+      email: 'interested@example.com',
+    });
+    const managerToken = await login(manager);
+    const buyerToken = await login(buyer);
+    const interestedToken = await login(interested);
+    const { product, sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      stockQuantity: 5,
+    });
+    const imageUrl = 'https://cdn.example.com/classic-crew.webp';
+    await prisma.productImage.create({
+      data: {
+        productId: product.id,
+        url: imageUrl,
+        s3Key: `products/${product.id}/classic-crew.webp`,
+        isFallback: true,
+        isProductPrimary: true,
+      },
+    });
+
+    for (const token of [buyerToken, interestedToken]) {
+      await request(app.getHttpServer())
+        .patch(`/v1/products/${product.id}/like`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ liked: true })
+        .expect(200);
+    }
+
+    await request(app.getHttpServer())
+      .post('/v1/me/cart/items')
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ skuId: sku.id, quantity: 3 })
+      .expect(201);
+    const orderResponse = await request(app.getHttpServer())
+      .post('/v1/orders')
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .expect(201);
+    const orderId = (orderResponse.body as CreatedOrderBody).id;
+    await request(app.getHttpServer())
+      .post('/v1/payment-intents')
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ orderId })
+      .expect(201);
+    await postWebhook(paymentIntentEvent(orderId, 'pi_checkout')).expect(204);
+
+    const firstCycle = await waitForSentNotifications(1);
+    expect(firstCycle[0]).toMatchObject({
+      clientId: interested.id,
+      productId: product.id,
+      lowStockCycle: 0,
+      stockAtSend: 2,
+    });
+    expect(sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: interested.email,
+        html: expect.stringContaining(imageUrl) as string,
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .patch(`/v1/skus/${sku.id}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ stockQuantity: 1 })
+      .expect(200);
+    await expect(prisma.stockNotification.count()).resolves.toBe(1);
+
+    await request(app.getHttpServer())
+      .patch(`/v1/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${buyerToken}`)
+      .send({ status: 'cancelled' })
+      .expect(200);
+    await expect(
+      prisma.product.findUniqueOrThrow({ where: { id: product.id } }),
+    ).resolves.toMatchObject({ lowStockCycle: 1 });
+
+    await request(app.getHttpServer())
+      .patch(`/v1/skus/${sku.id}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ stockQuantity: 3 })
+      .expect(200);
+
+    const allCycles = await waitForSentNotifications(3);
+    expect(
+      allCycles.map(({ clientId, lowStockCycle }) => ({
+        clientId,
+        lowStockCycle,
+      })),
+    ).toEqual([
+      { clientId: interested.id, lowStockCycle: 0 },
+      ...[buyer.id, interested.id]
+        .sort()
+        .map((clientId) => ({ clientId, lowStockCycle: 1 })),
+    ]);
+    expect(
+      sendMail.mock.calls
+        .map(([message]: [{ to: string }]) => message.to)
+        .sort(),
+    ).toEqual([buyer.email, interested.email, interested.email].sort());
   });
 
   it('creates a paid Payment Link order only from the webhook and leaves the cart unchanged', async () => {

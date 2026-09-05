@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { CaslAbilityFactory } from '../authorization/casl-ability.factory';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SkusController } from './skus.controller';
 import { SkusService } from './skus.service';
@@ -21,7 +22,7 @@ class SkusAbilityRegistrar implements OnModuleInit {
 }
 
 @Module({
-  imports: [AuthorizationModule, PrismaModule],
+  imports: [AuthorizationModule, NotificationsModule, PrismaModule],
   controllers: [SkusController],
   providers: [SkusService, SkusAbilityRegistrar],
 })

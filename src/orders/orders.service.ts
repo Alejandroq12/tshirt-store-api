@@ -20,6 +20,8 @@ import {
   ValidationProblemException,
 } from '../common/problems';
 import type { EnvironmentVariables } from '../config/env.validation';
+import { StockCycleService } from '../notifications/stock-cycle.service';
+import { StockNotificationProducer } from '../notifications/stock-notification.producer';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ListMyOrdersQuery,
@@ -133,6 +135,8 @@ export class OrdersService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly stockCycle: StockCycleService,
+    private readonly notifications: StockNotificationProducer,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.currency = config.get('STORE_CURRENCY', { infer: true });
@@ -297,7 +301,7 @@ export class OrdersService {
   ): Promise<OrderResponse> {
     this.requireRoleFor(input.status, user.role);
 
-    const order = await this.prisma.$transaction(async (transaction) => {
+    const result = await this.prisma.$transaction(async (transaction) => {
       const current = await transaction.order.findFirst({
         where: {
           id: orderId,
@@ -307,6 +311,8 @@ export class OrdersService {
       });
 
       if (!current) throw new NotFoundException();
+
+      let notificationIds: string[] = [];
 
       if (input.status === OrderStatusUpdate.PROCESSING) {
         if (current.status !== PrismaOrderStatus.PAID) {
@@ -329,16 +335,19 @@ export class OrdersService {
           PrismaOrderStatus.SHIPPED,
         );
       } else {
-        await this.cancel(transaction, current);
+        notificationIds = await this.cancel(transaction, current);
       }
 
-      return transaction.order.findUniqueOrThrow({
+      const order = await transaction.order.findUniqueOrThrow({
         where: { id: orderId },
         include: ORDER_INCLUDE,
       });
+
+      return { order, notificationIds };
     });
 
-    return this.orderResponse(order);
+    await this.notifications.enqueue(result.notificationIds);
+    return this.orderResponse(result.order);
   }
 
   private requireRoleFor(status: OrderStatusUpdate, role: UserRole): void {
@@ -353,7 +362,7 @@ export class OrdersService {
   private async cancel(
     transaction: Prisma.TransactionClient,
     order: OrderRecord,
-  ): Promise<void> {
+  ): Promise<string[]> {
     if (order.status === PrismaOrderStatus.PENDING) {
       await this.changeStatus(
         transaction,
@@ -362,7 +371,7 @@ export class OrdersService {
         PrismaOrderStatus.CANCELLED,
         new Date(),
       );
-      return;
+      return [];
     }
 
     if (
@@ -373,6 +382,17 @@ export class OrdersService {
     }
 
     await this.lockStockRows(transaction, order.items);
+    const productIds = [
+      ...new Set(order.items.map(({ productId }) => productId)),
+    ].sort();
+    const totalsBefore = new Map<string, number>();
+    for (const productId of productIds) {
+      totalsBefore.set(
+        productId,
+        await this.stockCycle.totalStock(transaction, productId),
+      );
+    }
+
     await this.changeStatus(
       transaction,
       order.id,
@@ -390,6 +410,24 @@ export class OrdersService {
         select: { id: true },
       });
     }
+
+    const notificationIds: string[] = [];
+    for (const productId of productIds) {
+      const totalAfter = await this.stockCycle.totalStock(
+        transaction,
+        productId,
+      );
+      notificationIds.push(
+        ...(await this.stockCycle.evaluate(
+          transaction,
+          productId,
+          totalsBefore.get(productId)!,
+          totalAfter,
+        )),
+      );
+    }
+
+    return notificationIds;
   }
 
   private async changeStatus(

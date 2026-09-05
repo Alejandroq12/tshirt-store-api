@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { CaslAbilityFactory } from '../authorization/casl-ability.factory';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MyOrdersController } from './my-orders.controller';
 import { OrdersController } from './orders.controller';
@@ -27,7 +28,7 @@ class OrdersAbilityRegistrar implements OnModuleInit {
 }
 
 @Module({
-  imports: [AuthorizationModule, PrismaModule],
+  imports: [AuthorizationModule, NotificationsModule, PrismaModule],
   controllers: [OrdersController, MyOrdersController],
   providers: [OrdersService, OrdersAbilityRegistrar],
 })
