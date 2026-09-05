@@ -6,10 +6,11 @@ authentication, catalog, carts, orders and Stripe payments.
 
 [Open the API contract in Swagger Editor](https://editor.swagger.io/?url=https%3A%2F%2Fraw.githubusercontent.com%2FAlejandroq12%2Ftshirt-store-api%2Fdev%2Fapi%2Fopenapi.yaml).
 
-**25 of the 28 operations are built.** Authentication, products, SKUs, image
-uploads, likes, carts, orders and order history. Image upload needs an S3 bucket
-and AWS credentials to run. Payments and stock notifications are not written
-yet.
+**All 28 HTTP operations are built.** Authentication, products, SKUs, image
+uploads, likes, carts, orders, order history and both Stripe payment paths.
+Image upload needs an S3 bucket and AWS credentials to run. The queue-based
+stock-notification workflow remains separate work because it adds no HTTP
+operation.
 [Scope](#scope) lists both sides.
 
 ## Deployment
@@ -48,6 +49,12 @@ The API runs under `/v1`, at `http://localhost:3000/v1` by default.
 
 Mail sent while developing goes to Mailpit. Read it at
 <http://localhost:8025>. Nothing leaves your machine.
+
+Stripe calls require real test-mode values for `STRIPE_SECRET_KEY` and
+`STRIPE_WEBHOOK_SECRET`. Configure Stripe to send
+`payment_intent.succeeded` and `checkout.session.completed` to
+`/v1/webhooks/stripe`; locally, the Stripe CLI can forward those events and
+provides the signing secret.
 
 If port 5432 or 3000 is taken, change `POSTGRES_PORT` or `PORT` in `.env`. The
 port inside `DATABASE_URL` has to match `POSTGRES_PORT`.
@@ -92,9 +99,10 @@ Two things worth knowing before they surprise you:
   feed it; an instance role or a shared credentials file works as well, and
   `AWS_SESSION_TOKEN` is honoured by that chain even though the application
   never reads it by name. It is in the log redaction list for that reason.
-- **The Redis and Stripe settings are validated at boot although nothing reads
-  them yet.** Queues and payments are not built. Production additionally
-  refuses to start when a secret still holds the value published in a template.
+- **The Stripe settings configure the payments module.** The Redis URL is
+  validated at boot but is not read until the stock-notification queue is built.
+  Production additionally refuses to start when a secret still holds the value
+  published in a template.
 
 ### The seed is not optional
 
@@ -140,6 +148,7 @@ src/skus/              product variants
 src/images/            image uploads
 src/cart/              the client's cart and current-price totals
 src/orders/            order snapshots and the core status lifecycle
+src/payments/          Stripe links, intents and signed webhook processing
 src/authorization/     CASL abilities and the guard that checks them
 src/common/            problem+json types and the global exception filter
 src/config/            environment schema. A bad value stops the boot
@@ -200,7 +209,7 @@ PostgreSQL database, `tshirt_store_test`, created by the Compose init script
 next to the development one.
 
 Between tests it empties every table instead of rolling back a transaction,
-because checkout will manage its own transactions later. Each test then creates
+because checkout manages its own transactions. Each test then creates
 only the rows it needs, through the fixture helpers, so you can read a test and
 see its setup.
 
@@ -217,6 +226,7 @@ Built:
 - Products and SKUs, with public reads
 - Image upload to S3, with content type and size checks
 - Orders and filtered client order history
+- Stripe Payment Links, Payment Intents and idempotent signed webhooks
 - CASL rules for manager writes on products, SKUs and images, order access,
   and clients managing their likes, cart and orders
 - Environment validation that stops the boot on a bad value
@@ -227,13 +237,12 @@ Built:
 
 Not built:
 
-- **Payments and stock notifications.**
+- **Stock notifications.**
 - **Anything beyond the 28 operations in the contract.** No health route, no
   `/docs` route, no admin views.
 - **The Redis consumer.** Redis runs in Compose because the stock-notification
-  job needs a queue, but the queue arrives with that job.
-- **Stripe.** The SDK, the webhook route and signature checking belong to
-  payments.
+  job needs a queue. That section also adds the scheduled producer that retries
+  webhook events whose durable processing is still pending.
 
 ## Where the requirements needed interpretation
 
@@ -297,15 +306,11 @@ something broken.
   dependency graph, because `prisma` is an optional peer of `@prisma/client`.
   The only remaining fix is downgrading to `prisma@6.12`, which npm flags as
   breaking. The real fix is tracked upstream.
-- **The boot demands configuration nothing reads yet.** `REDIS_URL` and the
-  three Stripe settings have to be present and well-formed or the application
-  refuses to start, although no code path consumes them until queues and
-  payments are built. The check is on shape, not connectivity: a syntactically
-  valid URL satisfies it and no Redis or Stripe account has to exist. The cost is
-  therefore a line in a deployment checklist rather than an add-on, but it is a
-  line that serves nothing today. Validating the whole environment at once is
-  what makes a bad value fail the boot instead of the first request that needed
-  it, and splitting the schema per feature was judged not worth that trade.
+- **The boot demands one configuration value nothing reads yet.** `REDIS_URL`
+  has to be well-formed although no code path consumes it until the queue is
+  built. The check is on shape, not connectivity. Validating the whole
+  environment at once makes a bad value fail at boot; splitting the schema for
+  this one deferred integration was judged not worth the trade.
 - **Page size has no upper bound.** The contract's `limit` parameter is
   `minimum: 1` with no `maximum`, so `GET /products?limit=1000000` and
   `GET /orders?limit=1000000` are requests the delivered contract accepts, and
@@ -317,6 +322,32 @@ something broken.
   memory, so running more than one instance multiplies the effective limit. A
   shared counter belongs on the Redis that Compose already runs, and arrives
   with the queue.
+- **A failed insert can leave an active Payment Link with no local row.**
+  `POST /payment-links` creates the link at Stripe before storing it, so a
+  database failure in that window leaves a live, payable URL the API never
+  returned. Paying it produces a signed event that matches no `payment_links`
+  row, which the webhook stores unprocessed with its error and answers 204 —
+  the money is captured and visible, not lost. Recovery is an operator reading
+  `stripe_webhook_events` until the queue section adds the producer that
+  reprocesses `processed_at IS NULL`. Deactivating the link in a compensating
+  catch would narrow the window, not close it, because that call can fail too.
+- **`STORE_CURRENCY` is only correct for two-decimal currencies.** Amounts
+  reach Stripe as `value × 100`, which is wrong for a zero-decimal currency
+  such as JPY. The contract permits any ISO code in `Currency` but its `Amount`
+  pattern is `^(0|[1-9]\d{0,7})\.\d{2}$` and the column is `decimal(10,2)`, so
+  a zero-decimal currency cannot be represented in a conforming response
+  either. Supporting one is a contract change, not a service change.
+- **The webhook trusts the amount on a verified Stripe event.** A
+  `payment_intent.succeeded` event is applied to its order without comparing
+  `amount_received` against the frozen total, so an intent repriced through the
+  Stripe API between creation and confirmation would mark the order paid for
+  the wrong amount. Signature verification authenticates the sender, not the
+  figure: `STRIPE_WEBHOOK_SECRET` and `STRIPE_SECRET_KEY` are separate trust
+  boundaries, and the comparison would also catch a divergence with no attacker
+  at all — an operator acting in the Dashboard, or a later code path that
+  creates intents elsewhere. This is accepted residual risk rather than a
+  defended position; the Payment Link path takes the opposite approach and
+  records what Stripe charged.
 
 ## Design documents
 

@@ -12,16 +12,16 @@ flowchart LR
   Stripe[Stripe] -->|signed webhook| API
   API -->|Prisma| DB[(PostgreSQL)]
   API -->|image objects| S3[(AWS S3)]
-  API -->|enqueue| Queue[(Job queue)]
-  Worker[Notification worker] -->|consume| Queue
-  Worker -->|product image URL| S3
-  Worker --> Email[Email provider]
+  API -.->|planned enqueue| Queue[(Job queue — planned)]
+  Worker[Notification worker — planned] -.->|consume| Queue
+  Worker -.->|product image URL| S3
+  Worker -.-> Email[Email provider]
 ```
 
 The NestJS API is stateless and can run as more than one instance. PostgreSQL is
 the system of record. Images are stored in S3; only their URL/key and
-relationships are stored in PostgreSQL. A separate worker consumes required
-email jobs.
+relationships are stored in PostgreSQL. The required stock-notification worker
+and its queue are the next implementation section.
 
 ## Domain boundaries
 
@@ -64,9 +64,10 @@ orders.
 4. `payment_intent.succeeded` locks the affected Products and SKUs in a stable
    ID order and verifies that every order line is fully available. One database
    transaction then decrements every line in full, changes the order to `paid`,
-   reconciles the cart, evaluates stock-threshold crossings, and records the
-   event as processed. If any line is unavailable, none of these mutations is
-   committed and the event remains unprocessed with its error.
+   reconciles the cart, and records the event as processed. If any line is
+   unavailable, none of these mutations is committed and the event remains
+   unprocessed with its error. The stock-notification section extends this
+   transaction with threshold-cycle evaluation.
 5. Cart reconciliation subtracts each frozen order-line quantity from the
    current cart row for the same SKU. It updates a positive remainder, deletes
    the row when the remainder is zero or less, and does nothing if the row no
@@ -103,12 +104,13 @@ guidance requires signature verification against the raw body:
 [Stripe webhooks](https://docs.stripe.com/webhooks).
 
 The webhook returns 204 after durable receipt, including when business
-processing cannot yet finish. A scheduled reconciliation producer scans
-`stripe_webhook_events WHERE processed_at IS NULL` in oldest-first batches and
-enqueues their IDs. Workers claim rows with `FOR UPDATE SKIP LOCKED` and rerun
-the same idempotent handler; success sets `processed_at`, while another failure
-keeps the row pending with its latest error. Therefore recovery does not depend
-on Stripe redelivering an event already acknowledged by the API.
+processing cannot yet finish. The queue section adds a scheduled reconciliation
+producer that scans `stripe_webhook_events WHERE processed_at IS NULL` in
+oldest-first batches and enqueues their IDs. Workers claim rows with
+`FOR UPDATE SKIP LOCKED` and rerun the same idempotent handler; success sets
+`processed_at`, while another failure keeps the row pending with its latest
+error. Therefore recovery does not depend on Stripe redelivering an event
+already acknowledged by the API.
 
 Every stock mutation locks the Product row before its SKUs so concurrent
 changes for the same Product cannot calculate different aggregate totals. The

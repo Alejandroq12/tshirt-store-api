@@ -353,8 +353,6 @@ Table orders {
     Money uses decimal(10,2) in PostgreSQL and strings in the API.
     Currency is deployment configuration and is not stored per order.
 
-    Stripe identifiers are BLUEPRINT pending the Stripe workshop.
-
     Order CHECKs are in constraints.sql.
   '''
 }
@@ -410,8 +408,6 @@ Table payment_links {
   }
 
   Note: '''
-    BLUEPRINT pending the Stripe workshop.
-
     Each link represents one SKU and a fixed quantity.
     sku_id uses RESTRICT, so a linked SKU cannot be hard-deleted.
     A link is not revoked when its product changes; the webhook revalidates
@@ -437,21 +433,18 @@ Table stripe_webhook_events {
   }
 
   Note: '''
-    BLUEPRINT pending the Stripe workshop.
-
     stripe_event_id is unique so the same Stripe event is not processed twice.
     The raw payload is stored so failed processing can be retried. A successful
     payment event is marked processed only in the same transaction that fully
-    decrements every order line and applies the related order, cart, and
-    stock-cycle changes. An insufficient line leaves those mutations
-    uncommitted and records the event error for retry or reconciliation; stock
-    is never partly decremented.
+    decrements every order line and applies the related order and cart changes.
+    An insufficient line leaves those mutations uncommitted and records the
+    event error for retry or reconciliation; stock is never partly decremented.
 
-    After the webhook acknowledges durable receipt with 204, a scheduled
-    producer scans processed_at IS NULL and enqueues event IDs. Reconciliation
-    workers claim rows with FOR UPDATE SKIP LOCKED and rerun the same idempotent
-    handler. Partial index idx_webhook_pending in constraints.sql supports the
-    oldest-first scan without indexing completed events.
+    The stock-notification queue adds the scheduled producer that scans
+    processed_at IS NULL and enqueues event IDs. Reconciliation workers then
+    claim rows with FOR UPDATE SKIP LOCKED and rerun the same idempotent handler.
+    Partial index idx_webhook_pending in constraints.sql supports that scan
+    without indexing completed events.
 
     order_id is nullable because a Payment Link event can arrive before its
     order exists.
