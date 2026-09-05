@@ -4,6 +4,8 @@ import { Prisma } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import type { EnvironmentVariables } from '../config/env.validation';
+import type { StockCycleService } from '../notifications/stock-cycle.service';
+import type { StockNotificationProducer } from '../notifications/stock-notification.producer';
 import type { PrismaService } from '../prisma/prisma.service';
 import { SkusService } from './skus.service';
 
@@ -29,16 +31,33 @@ describe('SkusService', () => {
   const productFindUnique = jest.fn();
   const skuCreate = jest.fn();
   const skuFindFirst = jest.fn();
+  const skuFindUnique = jest.fn();
   const skuUpdate = jest.fn();
+  const queryRaw = jest.fn();
+  const transaction = jest.fn();
+  const totalStock = jest.fn();
+  const evaluateStockCycle = jest.fn();
+  const enqueueNotifications = jest.fn();
+  const transactionClient = {
+    productSku: { findUnique: skuFindUnique, update: skuUpdate },
+    $queryRaw: queryRaw,
+  };
   const prisma = {
     product: { findUnique: productFindUnique },
     productSku: {
       create: skuCreate,
       findFirst: skuFindFirst,
-      update: skuUpdate,
     },
+    $transaction: transaction,
   } as unknown as PrismaService;
-  const service = new SkusService(prisma, {
+  const stockCycle = {
+    totalStock,
+    evaluate: evaluateStockCycle,
+  } as unknown as StockCycleService;
+  const notifications = {
+    enqueue: enqueueNotifications,
+  } as unknown as StockNotificationProducer;
+  const service = new SkusService(prisma, stockCycle, notifications, {
     get: () => 'USD',
   } as unknown as ConfigService<EnvironmentVariables, true>);
 
@@ -47,7 +66,16 @@ describe('SkusService', () => {
     productFindUnique.mockResolvedValue({ id: SKU.productId });
     skuCreate.mockResolvedValue(SKU);
     skuFindFirst.mockResolvedValue(null);
+    skuFindUnique.mockResolvedValue({ productId: SKU.productId });
     skuUpdate.mockResolvedValue(SKU);
+    queryRaw.mockResolvedValue([]);
+    transaction.mockImplementation(
+      (work: (client: Prisma.TransactionClient) => Promise<unknown>) =>
+        work(transactionClient as unknown as Prisma.TransactionClient),
+    );
+    totalStock.mockResolvedValue(4);
+    evaluateStockCycle.mockResolvedValue([]);
+    enqueueNotifications.mockResolvedValue(undefined);
   });
 
   it('creates a SKU without converting its decimal string to a number', async () => {
@@ -229,5 +257,48 @@ describe('SkusService', () => {
       stockQuantity: 0,
     });
     expect(response).not.toHaveProperty('status');
+  });
+
+  it('locks the product and evaluates the aggregate stock change in one transaction', async () => {
+    totalStock.mockResolvedValueOnce(5).mockResolvedValueOnce(2);
+    evaluateStockCycle.mockResolvedValue(['notification-id']);
+
+    await service.update(SKU.id, { stockQuantity: 2 });
+
+    expect(skuFindUnique).toHaveBeenCalledWith({
+      where: { id: SKU.id },
+      select: { productId: true },
+    });
+    const [lock] = queryRaw.mock.calls[0] as [Prisma.Sql];
+    expect(lock.strings.join('')).toContain(
+      'SELECT id FROM products WHERE id = ',
+    );
+    expect(lock.strings.join('')).toContain('FOR UPDATE');
+    expect(lock.values).toEqual([SKU.productId]);
+    expect(queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      skuUpdate.mock.invocationCallOrder[0],
+    );
+    expect(evaluateStockCycle).toHaveBeenCalledWith(
+      transactionClient,
+      SKU.productId,
+      5,
+      2,
+    );
+    expect(transaction.mock.invocationCallOrder[0]).toBeLessThan(
+      enqueueNotifications.mock.invocationCallOrder[0],
+    );
+    expect(enqueueNotifications).toHaveBeenCalledWith(['notification-id']);
+  });
+
+  it('keeps an unknown SKU as 404 without evaluating a cycle', async () => {
+    skuFindUnique.mockResolvedValue(null);
+
+    await expect(service.update(SKU.id, { stockQuantity: 2 })).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(evaluateStockCycle).not.toHaveBeenCalled();
+    expect(enqueueNotifications).not.toHaveBeenCalled();
   });
 });

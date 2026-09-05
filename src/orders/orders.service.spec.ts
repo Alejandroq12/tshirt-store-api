@@ -13,6 +13,8 @@ import {
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { PROBLEM_TYPE } from '../common/problems';
 import type { EnvironmentVariables } from '../config/env.validation';
+import type { StockCycleService } from '../notifications/stock-cycle.service';
+import type { StockNotificationProducer } from '../notifications/stock-notification.producer';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
   ListMyOrdersQuery,
@@ -139,6 +141,9 @@ describe('OrdersService', () => {
   const skuUpdate = jest.fn<Promise<unknown>, [Prisma.ProductSkuUpdateArgs]>();
   const queryRaw = jest.fn<Promise<unknown>, [Prisma.Sql]>();
   const transaction = jest.fn();
+  const totalStock = jest.fn();
+  const evaluateStockCycle = jest.fn();
+  const enqueueNotifications = jest.fn();
   const transactionClient = {
     cart: { findUnique: cartFindUnique },
     cartItem: { update: cartItemUpdate, deleteMany: cartItemDeleteMany },
@@ -157,7 +162,14 @@ describe('OrdersService', () => {
     ...transactionClient,
     $transaction: transaction,
   } as unknown as PrismaService;
-  const service = new OrdersService(prisma, {
+  const stockCycle = {
+    totalStock,
+    evaluate: evaluateStockCycle,
+  } as unknown as StockCycleService;
+  const notifications = {
+    enqueue: enqueueNotifications,
+  } as unknown as StockNotificationProducer;
+  const service = new OrdersService(prisma, stockCycle, notifications, {
     get: () => 'USD',
   } as unknown as ConfigService<EnvironmentVariables, true>);
   const historyQuery = (
@@ -183,6 +195,9 @@ describe('OrdersService', () => {
     );
     skuUpdate.mockResolvedValue({ id: SKU_A_ID });
     queryRaw.mockResolvedValue([]);
+    totalStock.mockResolvedValue(10);
+    evaluateStockCycle.mockResolvedValue([]);
+    enqueueNotifications.mockResolvedValue(undefined);
   });
 
   it('snapshots cart fields in stable SKU order and computes totals', async () => {
@@ -701,6 +716,43 @@ describe('OrdersService', () => {
       });
     },
   );
+
+  it('evaluates an upward stock crossing during cancellation and enqueues after commit', async () => {
+    orderFindFirst.mockResolvedValue(orderFixture(PrismaOrderStatus.PAID));
+    orderFindUniqueOrThrow.mockResolvedValue(
+      orderFixture(PrismaOrderStatus.CANCELLED, { paidAt: PAID_AT }),
+    );
+    totalStock
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(4)
+      .mockResolvedValueOnce(5);
+
+    await service.updateStatus(
+      ORDER_ID,
+      { status: OrderStatusUpdate.CANCELLED },
+      CLIENT,
+    );
+
+    expect(evaluateStockCycle).toHaveBeenNthCalledWith(
+      1,
+      transactionClient,
+      PRODUCT_B_ID,
+      1,
+      4,
+    );
+    expect(evaluateStockCycle).toHaveBeenNthCalledWith(
+      2,
+      transactionClient,
+      PRODUCT_A_ID,
+      2,
+      5,
+    );
+    expect(orderFindUniqueOrThrow.mock.invocationCallOrder[0]).toBeLessThan(
+      enqueueNotifications.mock.invocationCallOrder[0],
+    );
+    expect(enqueueNotifications).toHaveBeenCalledWith([]);
+  });
 
   it.each([
     [PrismaOrderStatus.PENDING, OrderStatusUpdate.PROCESSING],

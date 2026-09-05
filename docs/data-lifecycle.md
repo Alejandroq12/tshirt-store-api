@@ -97,10 +97,11 @@ operation; it does not expose a DELETE unlike operation.
 
 ## Low-stock notifications
 
-- Stock mutations for one Product are serialized by locking its Product row
-  before its SKU rows. Low stock is the aggregate SKU stock crossing from
-  `> 3` to `<= 3`; this includes jumps such as 5 to 2. Staying at or below 3
-  does not trigger another notification.
+- Webhook decrements, paid-order cancellation restorations, and SKU stock
+  updates are serialized per Product by locking its Product row before its SKU
+  rows. Low stock is the aggregate SKU stock crossing from `> 3` to `<= 3`;
+  this includes jumps such as 5 to 2. Staying at or below 3 does not trigger
+  another notification.
 - A client is in the audience when they like the product and have no order line
   for any of its SKUs in an order that is paid and not cancelled. A
   paid-then-cancelled order therefore does not count as a purchase.
@@ -109,3 +110,7 @@ operation; it does not expose a DELETE unlike operation.
   `uq_stock_notice_cycle` allows one email per client, product, and cycle, so a
   client is warned once per low-stock event and a restock is what makes a later
   email possible.
+- A crossing creates a pending `stock_notifications` row in the stock mutation
+  transaction. BullMQ receives only that row's id after commit. The worker
+  reloads the current email address and fallback image, sends the email, and
+  then records `stock_at_send` and `sent_at`.

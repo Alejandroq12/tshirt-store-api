@@ -12,16 +12,17 @@ flowchart LR
   Stripe[Stripe] -->|signed webhook| API
   API -->|Prisma| DB[(PostgreSQL)]
   API -->|image objects| S3[(AWS S3)]
-  API -.->|planned enqueue| Queue[(Job queue — planned)]
-  Worker[Notification worker — planned] -.->|consume| Queue
-  Worker -.->|product image URL| S3
-  Worker -.-> Email[Email provider]
+  API -->|notification id| Queue[(Redis and BullMQ)]
+  Queue -->|consume and retry| Worker[Background workers]
+  Worker -->|reload and reconcile| DB
+  Worker --> Email[Email provider]
 ```
 
 The NestJS API is stateless and can run as more than one instance. PostgreSQL is
 the system of record. Images are stored in S3; only their URL/key and
-relationships are stored in PostgreSQL. The required stock-notification worker
-and its queue are the next implementation section.
+relationships are stored in PostgreSQL. BullMQ uses Redis for background work;
+PostgreSQL remains the durable source for pending notifications and Stripe
+events.
 
 ## Domain boundaries
 
@@ -32,6 +33,8 @@ and its queue are the next implementation section.
 - Orders own immutable item snapshots and the core status lifecycle.
 - Payments owns Stripe Payment Links, Payment Intents, and webhook
   reconciliation.
+- Notifications owns aggregate-stock cycles, the durable notification outbox,
+  queue production, and email workers.
 
 Controllers apply CASL guards. Managers may manage products, SKUs, and images
 and view all orders. Clients may read catalog data, set their own likes, manage
@@ -66,8 +69,8 @@ orders.
    transaction then decrements every line in full, changes the order to `paid`,
    reconciles the cart, and records the event as processed. If any line is
    unavailable, none of these mutations is committed and the event remains
-   unprocessed with its error. The stock-notification section extends this
-   transaction with threshold-cycle evaluation.
+   unprocessed with its error. Threshold-cycle evaluation commits in the same
+   transaction after the order has been marked paid.
 5. Cart reconciliation subtracts each frozen order-line quantity from the
    current cart row for the same SKU. It updates a positive remainder, deletes
    the row when the remainder is zero or less, and does nothing if the row no
@@ -104,34 +107,44 @@ guidance requires signature verification against the raw body:
 [Stripe webhooks](https://docs.stripe.com/webhooks).
 
 The webhook returns 204 after durable receipt, including when business
-processing cannot yet finish. The queue section adds a scheduled reconciliation
-producer that scans `stripe_webhook_events WHERE processed_at IS NULL` in
+processing cannot yet finish. A scheduled reconciliation producer scans
+`stripe_webhook_events WHERE processed_at IS NULL` in
 oldest-first batches and enqueues their IDs. Workers claim rows with
 `FOR UPDATE SKIP LOCKED` and rerun the same idempotent handler; success sets
 `processed_at`, while another failure keeps the row pending with its latest
 error. Therefore recovery does not depend on Stripe redelivering an event
 already acknowledged by the API.
 
-Every stock mutation locks the Product row before its SKUs so concurrent
-changes for the same Product cannot calculate different aggregate totals. The
-service compares the sum of all SKU stock immediately before and after the
-mutation. A low-stock event occurs only on a downward crossing from `> 3` to
-`<= 3`, including a jump such as 5 to 2, and enqueues one email job. Remaining
-at or below 3 does not enqueue another job. An upward crossing from `<= 3` to
-`> 3` increments `products.low_stock_cycle`; remaining above 3 does not. The
-worker sends the notification, including a product image, to clients who liked
-the product and have no order line for any of its SKUs in an order that is paid
-and not cancelled. `uq_stock_notice_cycle` allows one email per client,
-product, and cycle, so a client is warned once per low-stock event rather than
-once in the product's lifetime.
+Webhook decrements, paid-order cancellation restorations, and SKU stock updates
+lock the Product row before its SKUs so concurrent changes for the same Product
+cannot calculate different aggregate totals. Each path compares the sum of all
+SKU stock immediately before and after its mutation. A low-stock event occurs
+only on a downward crossing from `> 3` to `<= 3`, including a jump such as 5 to
+2, and enqueues one email job. Remaining at or below 3 does not enqueue another
+job. An upward crossing from `<= 3` to `> 3` increments
+`products.low_stock_cycle`; remaining above 3 does not. The worker sends the
+notification, including a product image, to clients who liked the product and
+have no order line for any of its SKUs in an order that is paid and not
+cancelled. `uq_stock_notice_cycle` allows one email per client, product, and
+cycle, so a client is warned once per low-stock event rather than once in the
+product's lifetime.
 
 ## Queue choice
 
-A queue is required by the assignment and keeps email-provider latency and
-retries outside product/SKU/payment requests. The API transaction records the
-state change and enqueues the smallest stable job identifier; the worker reloads
-current recipient/image data and records the send outcome. The exact queue
-product is an implementation choice, not part of the HTTP contract.
+BullMQ is the queue required by the assignment. It keeps email-provider latency
+and retries outside product/SKU/payment requests and uses the Redis instance
+already needed by the deployment. The API transaction records the state change
+and enqueues only the notification id after commit; the worker reloads current
+recipient and image data and records the send outcome. Jobs receive five
+attempts with exponential backoff. A repeatable BullMQ job scans pending Stripe
+events and notification rows every 30 seconds, claiming batches with
+`FOR UPDATE SKIP LOCKED` before enqueuing their stable ids. Queue keys are
+prefixed by `NODE_ENV`, so local test workers cannot consume development jobs.
+
+The notification outbox is at-least-once. If Redis is unavailable after a
+stock transaction commits, the scheduled scan later enqueues the pending row.
+If a worker sends an email and dies before writing `sent_at`, a retry can send a
+duplicate; writing `sent_at` first would allow a required email to be lost.
 
 ## Monitoring
 

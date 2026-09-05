@@ -4,6 +4,8 @@ import { OrderStatus, PaymentMethod, Prisma, UserRole } from '@prisma/client';
 import type Stripe from 'stripe';
 
 import type { EnvironmentVariables } from '../config/env.validation';
+import { StockCycleService } from '../notifications/stock-cycle.service';
+import { StockNotificationProducer } from '../notifications/stock-notification.producer';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeClient } from './stripe.client';
 
@@ -55,6 +57,22 @@ interface LockedCartItem {
   quantity: number;
 }
 
+interface ProcessedPayment {
+  orderId: string;
+  notificationIds: string[];
+}
+
+interface StockMutation {
+  inventory: Map<string, InventorySku>;
+  transitions: StockTransition[];
+}
+
+interface StockTransition {
+  productId: string;
+  totalBefore: number;
+  totalAfter: number;
+}
+
 type SupportedStripeEvent =
   Stripe.CheckoutSessionCompletedEvent | Stripe.PaymentIntentSucceededEvent;
 
@@ -78,6 +96,8 @@ export class StripeWebhookService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripe: StripeClient,
+    private readonly stockCycle: StockCycleService,
+    private readonly notifications: StockNotificationProducer,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.webhookSecret = config.get('STRIPE_WEBHOOK_SECRET', { infer: true });
@@ -130,8 +150,10 @@ export class StripeWebhookService {
   }
 
   async process(storedEventId: string): Promise<void> {
+    let notificationIds: string[];
+
     try {
-      await this.prisma.$transaction(async (transaction) => {
+      notificationIds = await this.prisma.$transaction(async (transaction) => {
         await transaction.$queryRaw(
           Prisma.sql`SELECT id FROM stripe_webhook_events WHERE id = ${storedEventId}::uuid FOR UPDATE`,
         );
@@ -139,18 +161,24 @@ export class StripeWebhookService {
         const stored = await transaction.stripeWebhookEvent.findUnique({
           where: { id: storedEventId },
         });
-        if (!stored || stored.processedAt) return;
+        if (!stored || stored.processedAt) return [];
 
         const event = stored.payload as unknown as SupportedStripeEvent;
-        const orderId =
+        const processed =
           event.type === 'payment_intent.succeeded'
             ? await this.processPaymentIntent(transaction, event)
             : await this.processCheckoutSession(transaction, event);
 
         await transaction.stripeWebhookEvent.update({
           where: { id: stored.id },
-          data: { orderId, processedAt: new Date(), errorMessage: null },
+          data: {
+            orderId: processed.orderId,
+            processedAt: new Date(),
+            errorMessage: null,
+          },
         });
+
+        return processed.notificationIds;
       });
     } catch (error) {
       await this.prisma.stripeWebhookEvent
@@ -164,12 +192,14 @@ export class StripeWebhookService {
         .catch(() => undefined);
       throw error;
     }
+
+    await this.notifications.enqueue(notificationIds);
   }
 
   private async processPaymentIntent(
     transaction: Prisma.TransactionClient,
     event: Stripe.PaymentIntentSucceededEvent,
-  ): Promise<string> {
+  ): Promise<ProcessedPayment> {
     const intent = event.data.object;
     const orderId = intent.metadata.orderId;
 
@@ -189,7 +219,7 @@ export class StripeWebhookService {
       order.status === OrderStatus.PAID &&
       order.stripePaymentIntentId === intent.id
     ) {
-      return order.id;
+      return { orderId: order.id, notificationIds: [] };
     }
     if (
       order.status !== OrderStatus.PENDING ||
@@ -198,7 +228,7 @@ export class StripeWebhookService {
       throw processingError('Payment Intent order cannot be paid');
     }
 
-    await this.decrementStock(transaction, order.items);
+    const stock = await this.decrementStock(transaction, order.items);
 
     const updated = await transaction.order.updateMany({
       where: {
@@ -218,13 +248,16 @@ export class StripeWebhookService {
     }
 
     await this.reconcileCart(transaction, order.clientId, order.items);
-    return order.id;
+    return {
+      orderId: order.id,
+      notificationIds: await this.evaluateStock(transaction, stock.transitions),
+    };
   }
 
   private async processCheckoutSession(
     transaction: Prisma.TransactionClient,
     event: Stripe.CheckoutSessionCompletedEvent,
-  ): Promise<string> {
+  ): Promise<ProcessedPayment> {
     const session = event.data.object;
     const stripePaymentLinkId = referencedId(session.payment_link);
     const email = session.customer_details?.email ?? session.customer_email;
@@ -244,7 +277,7 @@ export class StripeWebhookService {
       where: { stripeCheckoutSessionId: session.id },
       select: { id: true },
     });
-    if (existing) return existing.id;
+    if (existing) return { orderId: existing.id, notificationIds: [] };
 
     const [link, client] = await Promise.all([
       transaction.paymentLink.findUnique({
@@ -260,14 +293,14 @@ export class StripeWebhookService {
       throw processingError('Checkout Session cannot be matched locally');
     }
 
-    const inventory = await this.decrementStock(transaction, [
+    const stock = await this.decrementStock(transaction, [
       {
         skuId: link.skuId,
         productId: link.sku.productId,
         quantity: link.quantity,
       },
     ]);
-    const sku = inventory.get(link.skuId);
+    const sku = stock.inventory.get(link.skuId);
     if (!sku) throw processingError('Payment Link SKU was not found');
 
     if (chargedCents % link.quantity !== 0) {
@@ -303,18 +336,32 @@ export class StripeWebhookService {
       select: { id: true },
     });
 
-    return order.id;
+    return {
+      orderId: order.id,
+      notificationIds: await this.evaluateStock(transaction, stock.transitions),
+    };
   }
 
   private async decrementStock(
     transaction: Prisma.TransactionClient,
     lines: StockLine[],
-  ): Promise<Map<string, InventorySku>> {
+  ): Promise<StockMutation> {
     if (lines.length === 0) {
       throw processingError('Payment has no order lines');
     }
 
     await this.lockInventory(transaction, lines);
+
+    const productIds = [
+      ...new Set(lines.map(({ productId }) => productId)),
+    ].sort();
+    const totalsBefore = new Map<string, number>();
+    for (const productId of productIds) {
+      totalsBefore.set(
+        productId,
+        await this.stockCycle.totalStock(transaction, productId),
+      );
+    }
 
     const skuIds = lines.map(({ skuId }) => skuId);
     const inventory = await transaction.productSku.findMany({
@@ -346,7 +393,40 @@ export class StripeWebhookService {
       });
     }
 
-    return bySku;
+    const transitions: StockTransition[] = [];
+    for (const productId of productIds) {
+      const totalAfter = await this.stockCycle.totalStock(
+        transaction,
+        productId,
+      );
+      transitions.push({
+        productId,
+        totalBefore: totalsBefore.get(productId)!,
+        totalAfter,
+      });
+    }
+
+    return { inventory: bySku, transitions };
+  }
+
+  private async evaluateStock(
+    transaction: Prisma.TransactionClient,
+    transitions: StockTransition[],
+  ): Promise<string[]> {
+    const notificationIds: string[] = [];
+
+    for (const { productId, totalBefore, totalAfter } of transitions) {
+      notificationIds.push(
+        ...(await this.stockCycle.evaluate(
+          transaction,
+          productId,
+          totalBefore,
+          totalAfter,
+        )),
+      );
+    }
+
+    return notificationIds;
   }
 
   private async lockInventory(

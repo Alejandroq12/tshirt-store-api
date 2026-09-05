@@ -3,8 +3,8 @@ Project tshirt_store_api {
   Note: '''
     Defines the database structure and relationships.
 
-    CHECK constraints, delete guards, and PostgreSQL indexes are in the
-    constraints migration, `prisma/migrations/20260828002527_constraints/migration.sql`.
+    CHECK constraints, delete guards, and PostgreSQL indexes that Prisma cannot
+    express are in the hand-written migrations under `prisma/migrations`.
     Notes below refer to it by its original name, `constraints.sql`.
     API behavior is defined in `api/openapi.yaml`.
     Lifecycle rules are in `data-lifecycle.md`.
@@ -142,9 +142,10 @@ Table products {
     ## low_stock_cycle
 
     Low-stock notifications are product-level because likes are product-level.
-    Each stock mutation locks the Product row before its SKU rows and compares
-    aggregate SKU stock before and after the change. A low-stock event is the
-    downward crossing from > 3 to <= 3, including a jump such as 5 to 2.
+    Webhook decrements, paid-order cancellation restorations, and SKU stock
+    updates lock the Product row before its SKU rows and compare aggregate SKU
+    stock before and after the change. A low-stock event is the downward
+    crossing from > 3 to <= 3, including a jump such as 5 to 2.
     `low_stock_cycle` increments exactly once on the upward crossing from <= 3
     to > 3, so the next downward crossing can notify the same clients again.
     CHECK chk_products_low_stock_cycle prevents a negative cycle value.
@@ -458,8 +459,8 @@ Table stock_notifications {
   client_id uuid [not null]
   product_id uuid [not null]
   low_stock_cycle int [not null]
-  stock_at_send int [not null]
-  sent_at timestamptz [not null, default: `now()`]
+  stock_at_send int
+  sent_at timestamptz
 
   Indexes {
     product_id [name: 'idx_stock_notice_product']
@@ -467,12 +468,15 @@ Table stock_notifications {
   }
 
   Note: '''
-    Records a low-stock email sent to a client for a product. A client has not
-    purchased the product when no order line for any of its SKUs belongs to an
-    order that is paid and not cancelled.
+    Records a low-stock email due to a client for a product. Null stock_at_send
+    and sent_at mean the email is pending; the worker fills both after sending.
+    Partial index idx_stock_notice_pending supports reconciliation scans.
 
-    low_stock_cycle stores products.low_stock_cycle as it was when the email was
-    sent. uq_stock_notice_cycle allows one email per client, product, and cycle.
+    A client has not purchased the product when no order line for any of its
+    SKUs belongs to an order that is paid and not cancelled.
+
+    low_stock_cycle stores products.low_stock_cycle at the threshold crossing.
+    uq_stock_notice_cycle allows one email per client, product, and cycle.
     Only an upward aggregate-stock crossing from <= 3 to > 3 increments the
     cycle and makes a later downward crossing eligible for another email.
 

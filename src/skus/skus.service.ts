@@ -4,6 +4,8 @@ import { Prisma, type ProductSku, UserRole } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import type { EnvironmentVariables } from '../config/env.validation';
+import { StockCycleService } from '../notifications/stock-cycle.service';
+import { StockNotificationProducer } from '../notifications/stock-notification.producer';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkuRequest, UpdateSkuRequest } from './skus.dto';
 
@@ -100,6 +102,8 @@ export class SkusService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly stockCycle: StockCycleService,
+    private readonly notifications: StockNotificationProducer,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.currency = config.get('STORE_CURRENCY', { infer: true });
@@ -160,8 +164,21 @@ export class SkusService {
   }
 
   async update(skuId: string, input: UpdateSkuRequest): Promise<SkuResponse> {
-    return this.skuResponse(
-      await this.prisma.productSku.update({
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const existing = await transaction.productSku.findUnique({
+        where: { id: skuId },
+        select: { productId: true },
+      });
+      if (!existing) throw new NotFoundException();
+
+      await transaction.$queryRaw(
+        Prisma.sql`SELECT id FROM products WHERE id = ${existing.productId}::uuid FOR UPDATE`,
+      );
+      const totalBefore = await this.stockCycle.totalStock(
+        transaction,
+        existing.productId,
+      );
+      const sku = await transaction.productSku.update({
         where: { id: skuId },
         data: {
           skuCode: input.skuCode,
@@ -170,8 +187,23 @@ export class SkusService {
           price: input.price,
           stockQuantity: input.stockQuantity,
         },
-      }),
-    );
+      });
+      const totalAfter = await this.stockCycle.totalStock(
+        transaction,
+        existing.productId,
+      );
+      const notificationIds = await this.stockCycle.evaluate(
+        transaction,
+        existing.productId,
+        totalBefore,
+        totalAfter,
+      );
+
+      return { sku, notificationIds };
+    });
+
+    await this.notifications.enqueue(result.notificationIds);
+    return this.skuResponse(result.sku);
   }
 
   private skuResponse(sku: SkuCore): SkuResponse {

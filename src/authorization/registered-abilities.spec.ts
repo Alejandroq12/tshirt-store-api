@@ -1,10 +1,14 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CartModule } from '../cart/cart.module';
 import { ImagesModule } from '../images/images.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { ReconciliationProducer } from '../notifications/reconciliation.producer';
+import { StockCycleService } from '../notifications/stock-cycle.service';
+import { StockNotificationProducer } from '../notifications/stock-notification.producer';
 import { OrdersModule } from '../orders/orders.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { StripeClient } from '../payments/stripe.client';
@@ -30,11 +34,26 @@ const CLIENT: AuthenticatedUser = { ...MANAGER, role: 'CLIENT' };
 })
 class StubConfigModule {}
 
+@Module({
+  providers: [
+    { provide: StockCycleService, useValue: {} },
+    { provide: StockNotificationProducer, useValue: {} },
+    { provide: ReconciliationProducer, useValue: {} },
+  ],
+  exports: [
+    StockCycleService,
+    StockNotificationProducer,
+    ReconciliationProducer,
+  ],
+})
+class StubNotificationsModule {}
+
 describe('the abilities each feature registers', () => {
   let abilities: CaslAbilityFactory;
+  let moduleRef: TestingModule;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       imports: [
         StubConfigModule,
         ProductsModule,
@@ -45,6 +64,8 @@ describe('the abilities each feature registers', () => {
         PaymentsModule,
       ],
     })
+      .overrideModule(NotificationsModule)
+      .useModule(StubNotificationsModule)
       .overrideProvider(PrismaService)
       .useValue({})
       .overrideProvider(S3StorageService)
@@ -56,6 +77,8 @@ describe('the abilities each feature registers', () => {
     await moduleRef.init();
     abilities = moduleRef.get(CaslAbilityFactory);
   });
+
+  afterAll(() => moduleRef.close());
 
   const can = (
     user: AuthenticatedUser,
