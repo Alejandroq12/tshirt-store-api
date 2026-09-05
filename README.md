@@ -184,7 +184,7 @@ delivered.
 add the features Prisma cannot express: 18 CHECK constraints, 8 partial
 indexes, and the trigger that blocks any physical `DELETE` on `products`.
 
-```
+```text
 prisma/migrations/20260828002527_constraints/migration.sql
 prisma/migrations/20260905000000_stock_notification_outbox/migration.sql
 ```

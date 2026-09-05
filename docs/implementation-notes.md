@@ -38,7 +38,7 @@ rather than the Prisma schema:
 | Object                                     | Count |
 | ------------------------------------------ | ----- |
 | CHECK constraints                          | 18    |
-| Indexes (3 partial unique, 4 supporting)   | 7     |
+| Indexes (3 partial unique, 5 supporting)   | 8     |
 | Triggers                                   | 1     |
 
 The directory timestamps guarantee the order: `..._init` first, followed by
