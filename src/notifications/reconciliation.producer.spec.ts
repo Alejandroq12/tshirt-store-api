@@ -16,12 +16,15 @@ describe('ReconciliationProducer', () => {
   const upsertJobScheduler = jest.fn();
   const getJob = jest.fn();
   const add = jest.fn();
+  const on = jest.fn();
   const queue = {
     upsertJobScheduler,
     getJob,
     add,
+    client: Promise.resolve({ on }),
   } as unknown as Queue<StripeReconciliationJob | Record<string, never>>;
   const producer = new ReconciliationProducer(queue);
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -48,6 +51,30 @@ describe('ReconciliationProducer', () => {
     upsertJobScheduler.mockRejectedValue(new Error('Redis unavailable'));
 
     await expect(producer.onApplicationBootstrap()).resolves.toBeUndefined();
+  });
+
+  it('registers the scan again once Redis becomes ready', async () => {
+    upsertJobScheduler.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+    await producer.onApplicationBootstrap();
+    await settle();
+
+    expect(on).toHaveBeenCalledWith('ready', expect.any(Function));
+    const [, reconnected] = on.mock.calls[0] as [string, () => void];
+    upsertJobScheduler.mockClear();
+
+    reconnected();
+    await settle();
+
+    expect(upsertJobScheduler).toHaveBeenCalledWith(
+      RECONCILIATION_SCHEDULER_ID,
+      { every: RECONCILIATION_INTERVAL_MS },
+      {
+        name: SCAN_PENDING_JOB,
+        data: {},
+        opts: RETRYABLE_JOB_OPTIONS,
+      },
+    );
   });
 
   it('enqueues the stored Stripe event id with retries and backoff', async () => {

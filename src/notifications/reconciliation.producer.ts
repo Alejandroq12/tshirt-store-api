@@ -24,6 +24,20 @@ export class ReconciliationProducer implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    void this.followRedis();
+    await this.registerSchedule();
+  }
+
+  private async followRedis(): Promise<void> {
+    try {
+      const client = await this.queue.client;
+      client.on('ready', () => void this.registerSchedule());
+    } catch {
+      this.logger.warn('reconciliation schedule cannot follow Redis restarts');
+    }
+  }
+
+  private async registerSchedule(): Promise<void> {
     try {
       await this.queue.upsertJobScheduler(
         RECONCILIATION_SCHEDULER_ID,
