@@ -339,10 +339,15 @@ something broken.
   either. Supporting one is a contract change, not a service change.
 - **The webhook trusts the amount on a verified Stripe event.** A
   `payment_intent.succeeded` event is applied to its order without comparing
-  `amount_received` against the frozen total. Repricing a Payment Intent
-  requires the secret key, and an attacker holding that key can create charges
-  directly, so the check would add no protection that the key itself does not
-  already remove.
+  `amount_received` against the frozen total, so an intent repriced through the
+  Stripe API between creation and confirmation would mark the order paid for
+  the wrong amount. Signature verification authenticates the sender, not the
+  figure: `STRIPE_WEBHOOK_SECRET` and `STRIPE_SECRET_KEY` are separate trust
+  boundaries, and the comparison would also catch a divergence with no attacker
+  at all — an operator acting in the Dashboard, or a later code path that
+  creates intents elsewhere. This is accepted residual risk rather than a
+  defended position; the Payment Link path takes the opposite approach and
+  records what Stripe charged.
 
 ## Design documents
 
