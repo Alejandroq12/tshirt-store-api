@@ -40,7 +40,7 @@ cp .env.seed.example .env.seed
 docker compose up -d      # PostgreSQL, Redis, Mailpit
 npm install
 npm run db:migrate        # schema, then the hand-written constraints
-npm run db:seed           # a manager and the t-shirts category
+npm run db:seed           # a manager, ten categories, and a starter catalogue
 npm run start:dev
 ```
 
@@ -111,11 +111,33 @@ Two things cannot be created through the API, so they come from
 - **A manager.** `POST /auth/sign-up` always creates a client, and no other
   operation creates a user. Without the seed you cannot call any manager-only
   endpoint.
-- **A category.** Every product needs one, and there is no endpoint that
-  creates categories.
+- **The ten categories.** Every product belongs to one, and no operation in the
+  contract creates them. They are reference data the store is configured with,
+  not something a manager edits at runtime, which is why the contract has no
+  category endpoint and the seed owns them instead:
 
-Its credentials live in `.env.seed`, which only the seed loads. The running API
-never receives the manager's password, so it cannot leak it.
+  | Category    | Category    | Category         |
+  | ----------- | ----------- | ---------------- |
+  | T-Shirts    | Hoodies     | Caps             |
+  | Long Sleeve | Sweatshirts | Accessories      |
+  | Polo Shirts | Tank Tops   | Limited Editions |
+  |             |             | Outlet           |
+
+The seed also fills those categories with 15 products and 38 SKUs so the
+catalogue is not empty on a fresh clone. **Every seeded product is inactive**,
+because activating one requires a usable primary image and only
+`POST /products/{productId}/images` can supply that. So a fresh clone shows an
+empty `GET /products` to an anonymous caller until a manager uploads an image
+and flips `status`, which is the intended order and not a gap. Prices and stock
+are spread deliberately: several SKUs sit at or below the low-stock threshold of
+3, so a single `PATCH /skus/{skuId}` can demonstrate a threshold crossing.
+
+Re-running the seed is safe. Categories and SKUs upsert on their unique columns,
+and a product is matched by name, so nothing is duplicated and manual edits to
+`status` survive.
+
+The manager's credentials live in `.env.seed`, which only the seed loads. The
+running API never receives that password, so it cannot leak it.
 
 ## Scripts
 
@@ -131,7 +153,7 @@ never receives the manager's password, so it cannot leak it.
 | `npm run typecheck`               | `tsc --noEmit`                          |
 | `npm run lint:api`                | Redocly against the contract            |
 | `npm run db:migrate`              | Apply migrations                        |
-| `npm run db:seed`                 | Seed the manager and category           |
+| `npm run db:seed`                 | Seed the manager and the catalogue      |
 | `npm run db:studio`               | Browse the data in Prisma Studio        |
 
 ## Layout
@@ -312,6 +334,13 @@ something broken.
   every Stripe event whose `processed_at` is null. A permanently invalid event
   therefore remains pending and requires operator intervention; applying an age
   limit could also abandon a recoverable payment.
+- **Order cancellation is not coordinated with Stripe.** Cancelling a pending
+  order does not cancel an already-created Payment Intent, so a later successful
+  payment cannot settle that cancelled order and remains pending for operator
+  intervention. Cancelling a paid or processing order marks it cancelled and
+  restores its stock, but this API neither creates nor records a Stripe refund;
+  the operator must issue that refund separately in Stripe.
+
 - **Page size has no upper bound.** The contract's `limit` parameter is
   `minimum: 1` with no `maximum`, so `GET /products?limit=1000000` and
   `GET /orders?limit=1000000` are requests the delivered contract accepts, and
