@@ -1,397 +1,294 @@
 # T-Shirt Store API
 
-A NestJS service that implements the contract in
-[`api/openapi.yaml`](api/openapi.yaml): 23 paths and 28 operations covering
-authentication, catalog, carts, orders and Stripe payments.
+A NestJS API for a T-shirt store. It implements all 28 operations in
+[`api/openapi.yaml`](api/openapi.yaml), including authentication, catalog,
+carts, orders, Stripe payments, signed webhooks, and low-stock email jobs.
 
-[Open the API contract in Swagger Editor](https://editor.swagger.io/?url=https%3A%2F%2Fraw.githubusercontent.com%2FAlejandroq12%2Ftshirt-store-api%2Fdev%2Fapi%2Fopenapi.yaml).
+[Open the contract in Swagger Editor](https://editor.swagger.io/?url=https%3A%2F%2Fraw.githubusercontent.com%2FAlejandroq12%2Ftshirt-store-api%2Fdev%2Fapi%2Fopenapi.yaml).
 
-**All 28 HTTP operations are built.** Authentication, products, SKUs, image
-uploads, likes, carts, orders, order history and both Stripe payment paths are
-implemented, together with the required BullMQ stock-notification workflow.
-Image upload needs an S3 bucket and AWS credentials to run.
-[Scope](#scope) lists both sides.
+## Scope
 
-## Deployment
+The API has three user modes:
 
-The API is deployed at `https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1`.
+| Caller    | Main actions                                                               |
+| --------- | -------------------------------------------------------------------------- |
+| Anonymous | Read active products and visible SKUs                                      |
+| Client    | Manage likes, their cart, their orders, order history, and Payment Intents |
+| Manager   | Manage products, SKUs, images, all orders, and Payment Links               |
 
-Nothing answers at `/`, because the contract defines no route there. To check
-that the service is up, list products. That operation is open to anonymous
-callers, and the contract makes `limit` and `offset` required:
+Main features:
 
-<https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1/products?limit=20&offset=0>
+- Access and refresh JWTs backed by revocable database sessions
+- Argon2id passwords and password reset by email
+- Product lifecycle, variants, S3 images, likes, and current-price carts
+- Order snapshots, history, and status tracking
+- Stripe Payment Intents, Payment Links, and signed webhooks
+- Ordered stock locks and BullMQ email jobs with scheduled recovery
+- Strict validation, Problem Details errors, CASL permissions, and safe logs
 
-Password-reset and password-change emails go out through Mailtrap, from the
-verified sending domain `quezadajulio.com`.
+The API does not include category management, manager sign-up, `GET /skus`,
+refunds, `/health`, `/docs`, or admin pages. The seed creates categories and the
+first manager. Product details include their SKUs.
 
-## Requirements
+## Stack
 
-- Node.js 22 or newer
-- Docker with Compose
+- Node.js 22+, TypeScript, NestJS 11, OpenAPI 3.1, Redocly, and oasdiff
+- PostgreSQL with Prisma 6; JWT sessions, Argon2id, and CASL
+- Stripe, AWS S3, Nodemailer, BullMQ, and Redis
+- Jest, Supertest, GitHub Actions, and Heroku
 
-## Getting started
+## Architecture
+
+![T-Shirt Store API architecture](docs/apiv2.drawio.png)
+
+The app is a modular monolith. One NestJS process contains the HTTP API,
+domain services, Prisma Client, BullMQ producers, and BullMQ processors.
+PostgreSQL, Redis, Stripe, S3, and SMTP are external services.
+
+BullMQ is code inside NestJS. Redis stores its jobs, retries, and schedules.
+Redis does not store orders, stock, or users. PostgreSQL is the source of truth
+and also stores pending webhook events and email work.
+
+The current Heroku app has no separate worker process. Each web dyno handles
+HTTP and background jobs. This is simple for the current size. A separate
+worker entry point would allow independent scaling later.
+
+See [`docs/architecture.md`](docs/architecture.md) for the Mermaid source,
+queue choice, deployment shape, and monitoring plan.
+
+## Project structure
+
+```text
+api/openapi.yaml       HTTP contract
+docs/                  architecture, data lifecycle, and database design
+prisma/                schema, migrations, constraints, and seed
+src/main.ts            only process entry point
+src/bootstrap.ts       shared HTTP setup
+src/app.module.ts      module composition
+src/auth/              login, JWTs, sessions, and password flows
+src/products/          product reads and manager writes
+src/skus/              product variants
+src/images/            S3 image upload and assignments
+src/cart/              client cart
+src/orders/            snapshots, history, and status changes
+src/payments/          Stripe links, intents, and webhooks
+src/notifications/     stock cycles, BullMQ jobs, and reconciliation
+src/authorization/     CASL permissions
+src/common/            validation and Problem Details errors
+src/config,logging/    validated configuration and safe logs
+src/prisma,mail,storage/ database, SMTP, and S3 adapters
+test/                   end-to-end tests and fixtures
+```
+
+Controllers handle HTTP. DTOs validate input. Services hold business rules and
+transactions. Guards handle authentication and permissions. Feature modules
+register their CASL rules. Services use Prisma directly, so there is no extra
+repository layer that only repeats Prisma calls.
+
+## Request flow
+
+For `POST /v1/orders`, the path is: Heroku Router, NestJS request setup, JWT
+and session guard, CASL guard, controller, `OrdersService`, Prisma transaction,
+PostgreSQL constraints, then the HTTP response.
+
+[`src/bootstrap.ts`](src/bootstrap.ts) adds `/v1`, Helmet, CORS, proxy trust,
+strict 422 validation, and the global error filter. E2E tests use this same
+setup.
+
+## Security and background work
+
+Authentication uses access and refresh JWTs plus a `sessions` row. Logout
+revokes one session. Password change or reset revokes all sessions for that
+user. Every route needs JWT by default unless it uses `@Public()` or
+`@OptionalAuth()`.
+
+Pino logs JSON in deployed environments. It returns an `X-Request-Id` and hides
+authorization headers, cookies, passwords, tokens, Stripe signatures,
+`clientSecret`, card fields, and known environment secrets. Server errors do
+not return internal detail.
+
+The Stripe webhook verifies `Stripe-Signature` against the raw request body.
+It stores the event before business changes. A repeated event ID does not apply
+stock twice.
+
+Successful payment locks Products first and SKUs in ascending ID order. Order,
+stock, cart reconciliation, low-stock outbox, and webhook state commit in one
+transaction.
+
+Low stock means total Product stock crosses from above 3 to 3 or less. The
+worker emails clients who liked the Product and have not kept a paid purchase
+of it. The email includes a Product image. BullMQ retries five times with
+exponential backoff. A scan runs every 30 seconds to recover pending work.
+
+## Production & Reliability
+
+- **Horizontal scaling:** 2 Heroku Standard-1X web dynos.
+- **Safer deployments:** Heroku Preboot enabled.
+- **Migration safety:** Prisma migrations run in Heroku Release Phase before deployment.
+- **Staging environment:** Dedicated Heroku staging app with isolated PostgreSQL.
+- **Disaster recovery tested:** Production backup successfully restored and verified in staging.
+- **Deployment pipeline:** GitHub -> CI -> Staging -> manual promotion -> Production.
+- **Operational monitoring:** Heroku metrics for latency, errors, memory, throughput, and dyno load.
+- **Shared infrastructure:** PostgreSQL as durable state and Redis/BullMQ for background processing.
+
+The CI workflow verifies code but does not contain the Heroku deployment step.
+Staging deployment and manual promotion are configured outside that workflow.
+Both web dynos also run BullMQ processors, so scaling web adds database and
+Redis connections as well as HTTP capacity.
+
+The Heroku process types are:
+
+```procfile
+release: npx prisma migrate deploy
+web: node dist/main.js
+```
+
+Production is at <https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1>. There is
+no `/` route. Use `/products?limit=20&offset=0` to check it. Production email
+uses Mailtrap with the verified `quezadajulio.com` domain.
+
+## Local setup
+
+Requirements: Node.js 22 or newer and Docker with Compose.
+
+For a first setup only:
 
 ```bash
 cp .env.example .env
 cp .env.test.example .env.test
 cp .env.seed.example .env.seed
+```
 
-docker compose up -d      # PostgreSQL, Redis, Mailpit
-npm install
-npm run db:migrate        # schema, then the hand-written constraints
-npm run db:seed           # a manager, ten categories, and a starter catalogue
+Review the copied values, then run:
+
+```bash
+npm ci
+docker compose up -d
+npm run db:migrate
+npm run db:seed
 npm run start:dev
 ```
 
-The API runs under `/v1`, at `http://localhost:3000/v1` by default.
+The API is at `http://localhost:3000/v1`. Mailpit is at
+`http://localhost:8025`. Stop services with `docker compose down`.
 
-Mail sent while developing goes to Mailpit. Read it at
-<http://localhost:8025>. Nothing leaves your machine.
+The seed creates inactive Products because activation needs a primary fallback
+image. Log in as the seeded manager, upload an image, then PATCH the Product to
+`active` before testing it as an anonymous user or client.
 
-Stripe calls require real test-mode values for `STRIPE_SECRET_KEY` and
-`STRIPE_WEBHOOK_SECRET`. Configure Stripe to send
+If the host PostgreSQL port changes, update `POSTGRES_PORT` and the port inside
+both `DATABASE_URL` values. Never point `.env.test` at a non-test database.
+
+Real Stripe test keys are needed for payment calls. Configure Stripe to send
 `payment_intent.succeeded` and `checkout.session.completed` to
-`/v1/webhooks/stripe`; locally, the Stripe CLI can forward those events and
-provides the signing secret.
+`/v1/webhooks/stripe`. The Stripe CLI can forward local events and provide its
+signing secret. Real S3 configuration is needed only for image upload.
 
-If port 5432 or 3000 is taken, change `POSTGRES_PORT` or `PORT` in `.env`. The
-port inside `DATABASE_URL` has to match `POSTGRES_PORT`.
+If npm ignores install scripts, run `npm run db:generate`; run `npx husky` to
+install the optional Git hook.
 
-If `npm config get ignore-scripts` says `true`, two setup steps are skipped.
-Run `npm run db:generate` to build the Prisma client, and `npx husky` if you
-want the pre-commit hook.
+## Environment variables
 
-### What the environment holds
+Use `.env.example` for the API, `.env.test.example` for E2E, and
+`.env.seed.example` for the seed manager.
 
-There are three templates — `.env.example`, `.env.test.example` and
-`.env.seed.example` — and `src/config/published-placeholders.spec.ts` reads all
-of them from disk. It checks the variables whose name ends in `SECRET`,
-`PASSWORD`, `KEY` or `TOKEN`: each such value has to be listed as a published
-placeholder, which is what makes production refuse to boot on it. A secret held
-under a name outside that pattern is not caught. `src/config/env.validation.ts` is the list the
-application itself validates; the AWS SDK reads a few more of its own, noted
-below.
+Main groups are `DATABASE_URL`, `REDIS_URL`, JWT secrets and TTLs, password
+settings, `STORE_CURRENCY`, SMTP, Stripe, S3, CORS, and `TRUST_PROXY`.
+Configuration is validated at startup. In production, published placeholder
+secrets are rejected.
 
-Validation runs at boot and stops it on a bad value, rather than failing later
-at the first request that needed it. Variables fall into four groups:
+AWS credentials are optional because the AWS SDK uses its default provider
+chain. `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN`
+are one supported source. Validation checks value shape, not provider access.
 
-- **Required.** The database and Redis URLs, both JWT secrets and their TTLs,
-  the reset-token TTL, the CORS allow-list, the store currency, the SMTP host
-  and port, the sender address, the S3 region and bucket, and the three Stripe
-  settings. Required means present and well-formed, not real: the placeholders
-  in `.env.example` satisfy validation, which is what lets a fresh clone boot.
-- **Defaulted.** `NODE_ENV`, `PORT`, `LOG_LEVEL`, `TRUST_PROXY`, `SMTP_SECURE`,
-  the three Argon2 cost parameters, and the two password-reset rate-limit
-  settings. Leaving them out is fine.
-- **Optional.** `SMTP_USER` and `SMTP_PASSWORD`, which an unauthenticated relay
-  such as the local Mailpit does not need; `AWS_ACCESS_KEY_ID` and
-  `AWS_SECRET_ACCESS_KEY`; and `AWS_S3_PUBLIC_BASE_URL`, which only changes the
-  host in a returned image URL.
-- **Read by Compose, not by the application.** `POSTGRES_*`, `REDIS_PORT` and
-  `MAILPIT_UI_PORT`.
+## Database and seed
 
-Two things worth knowing before they surprise you:
+Prisma creates 16 models and 21 foreign keys. SQL migrations add 18 CHECK
+constraints, 8 partial indexes, and one trigger that blocks hard deletion of
+Products. Key rules include non-negative stock, correct line totals, one pending
+order per client, and one low-stock email per client, Product, and cycle.
 
-- **The S3 client is constructed with a region and no credentials**, so it uses
-  the AWS default provider chain. The two AWS variables above are one way to
-  feed it; an instance role or a shared credentials file works as well, and
-  `AWS_SESSION_TOKEN` is honoured by that chain even though the application
-  never reads it by name. It is in the log redaction list for that reason.
-- **The Stripe settings configure the payments module.** `REDIS_URL` connects
-  BullMQ to the queue used by stock notifications and webhook reconciliation.
-  Production additionally refuses to start when a secret still holds the value
-  published in a template.
+Commands:
 
-### The seed is not optional
-
-Two things cannot be created through the API, so they come from
-`npm run db:seed`:
-
-- **A manager.** `POST /auth/sign-up` always creates a client, and no other
-  operation creates a user. Without the seed you cannot call any manager-only
-  endpoint.
-- **The ten categories.** Every product belongs to one, and no operation in the
-  contract creates them. They are reference data the store is configured with,
-  not something a manager edits at runtime, which is why the contract has no
-  category endpoint and the seed owns them instead:
-
-  | Category    | Category    | Category         |
-  | ----------- | ----------- | ---------------- |
-  | T-Shirts    | Hoodies     | Caps             |
-  | Long Sleeve | Sweatshirts | Accessories      |
-  | Polo Shirts | Tank Tops   | Limited Editions |
-  |             |             | Outlet           |
-
-The seed also fills those categories with 15 products and 38 SKUs so the
-catalogue is not empty on a fresh clone. **Every seeded product is inactive**,
-because activating one requires a usable primary image and only
-`POST /products/{productId}/images` can supply that. So a fresh clone shows an
-empty `GET /products` to an anonymous caller until a manager uploads an image
-and flips `status`, which is the intended order and not a gap. Prices and stock
-are spread deliberately: several SKUs sit at or below the low-stock threshold of
-3, so a single `PATCH /skus/{skuId}` can demonstrate a threshold crossing.
-
-Re-running the seed is safe. Categories and SKUs upsert on their unique columns,
-and a product is matched by name, so nothing is duplicated and manual edits to
-`status` survive.
-
-The manager's credentials live in `.env.seed`, which only the seed loads. The
-running API never receives that password, so it cannot leak it.
-
-## Scripts
-
-| Script                            | What it does                            |
-| --------------------------------- | --------------------------------------- |
-| `npm run start:dev`               | Run with reload                         |
-| `npm test`                        | Unit tests                              |
-| `npm run test:e2e`                | End-to-end tests, against real Postgres |
-| `npm run test:ci`                 | Unit tests with coverage thresholds     |
-| `npm run lint`                    | ESLint. Fails on any problem or warning |
-| `npm run lint:fix`                | ESLint with `--fix`                     |
-| `npm run format` / `format:check` | Prettier, write or check                |
-| `npm run typecheck`               | `tsc --noEmit`                          |
-| `npm run lint:api`                | Redocly against the contract            |
-| `npm run db:migrate`              | Apply migrations                        |
-| `npm run db:seed`                 | Seed the manager and the catalogue      |
-| `npm run db:studio`               | Browse the data in Prisma Studio        |
-
-## Layout
-
-```
-api/openapi.yaml       the delivered contract. A pull request that breaks it fails CI
-docs/                  the database and lifecycle design
-prisma/schema.prisma   16 models, 21 foreign keys, 3 enums
-prisma/migrations/     generated DDL, then the hand-written constraints
-src/auth/              sign up, log in, sessions, password flows
-src/products/          the product catalog
-src/skus/              product variants
-src/images/            image uploads
-src/cart/              the client's cart and current-price totals
-src/orders/            order snapshots and the core status lifecycle
-src/payments/          Stripe links, intents and signed webhook processing
-src/notifications/     stock cycles, BullMQ jobs and reconciliation
-src/authorization/     CASL abilities and the guard that checks them
-src/common/            problem+json types and the global exception filter
-src/config/            environment schema. A bad value stops the boot
-src/logging/           JSON logs, redaction, request ids
-src/mail/              sending email
-src/prisma/            the database connection
-src/security/          the password-reset rate limit
-src/storage/           uploading files to S3
-src/bootstrap.ts       global setup, shared by main.ts and the tests
-test/                  end-to-end suites, fixtures, table truncation
+```bash
+npm run db:migrate         # create or apply a development migration
+npm run db:migrate:deploy  # apply committed migrations
+npm run db:migrate:test    # apply migrations using .env.test
+npm run db:seed            # manager, 10 categories, 15 Products, 38 SKUs
+npm run db:studio          # inspect local data
 ```
 
-## What the contract forces
+Do not edit an applied migration. Add a new one and keep `schema.prisma`, SQL,
+DBML, and lifecycle docs aligned. Prisma manages a connection pool per process.
+This repo does not set a fixed pool size. The seed is safe to rerun and its
+manager password is loaded only by the seed process.
 
-Getting any of these wrong would contradict a contract that was already
-delivered.
+## Tests
 
-- **Invalid input returns 422, not 400.** 24 of the 28 operations document 422.
-  NestJS answers 400 by default.
-- **Unknown properties are rejected.** 36 schemas say
-  `additionalProperties: false`.
-- **Errors are `application/problem+json`** with `type`, `title` and `status`,
-  and nothing else. The request id goes in the `X-Request-Id` header and the
-  logs, never in the body.
-- **Every route lives under `/v1`.**
-- **JSON is camelCase, the database is snake_case.**
-- **Money is a string with two decimals**, stored as `decimal(10,2)`. Never a
-  JavaScript number.
+Start PostgreSQL and Redis before E2E tests:
 
-## Database
-
-`prisma migrate` creates 16 tables and 21 foreign keys. Hand-written migrations
-add the features Prisma cannot express: 18 CHECK constraints, 8 partial
-indexes, and the trigger that blocks any physical `DELETE` on `products`.
-
-```text
-prisma/migrations/20260828002527_constraints/migration.sql
-prisma/migrations/20260905000000_stock_notification_outbox/migration.sql
+```bash
+docker compose up -d postgres redis
+npm run lint
+npm run format:check
+npm run typecheck
+npm run lint:api
+npm run build
+npm run test:ci -- --runInBand
+npm run test:e2e
 ```
 
-Check them after migrating:
+`test:e2e` applies test migrations first. `truncateAll` refuses to clear a
+database whose name does not end in `_test`.
 
-```sql
-SELECT count(*) FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
-  WHERE n.nspname = 'public' AND c.contype = 'c';    -- 18
-SELECT count(*) FROM pg_index WHERE indpred IS NOT NULL;    -- 8
-SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal;     -- 1
-```
+E2E uses real NestJS, PostgreSQL, Redis, and BullMQ. Stripe, S3, and SMTP use
+controlled fakes. Checkout tests also enqueue a real reconciliation job and
+wait for the registered worker without calling it directly.
 
-## Testing
+GitHub Actions runs the same checks with PostgreSQL 17 and Redis 8. Pull
+requests also run oasdiff to reject breaking OpenAPI changes. No Postman
+collection is committed. Import `api/openapi.yaml` into Postman or use Swagger
+Editor.
 
-Unit tests and end-to-end tests run separately on purpose. Unit tests run on
-every save. End-to-end tests run before a push and in CI.
+## Main design choices
 
-The end-to-end suite builds the application the same way `main.ts` does, so the
-pipe, guards and filter it tests are the ones that ship. It uses a real
-PostgreSQL database, `tshirt_store_test`, created by the Compose init script
-next to the development one.
+- OpenAPI defines routes, schemas, and status codes.
+- A modular monolith keeps deployment and transactions simple.
+- PostgreSQL constraints and locks protect important rules.
+- Carts do not reserve stock. Payment checks it again under locks.
+- Orders freeze purchase data. Pending jobs are stored before processing.
+- BullMQ processors share web dynos for the current deployment.
+- Money stays as decimal strings; invalid input returns Problem Details with 422.
 
-Between tests it empties every table instead of rolling back a transaction,
-because checkout manages its own transactions. Each test then creates
-only the rows it needs, through the fixture helpers, so you can read a test and
-see its setup.
+## Known limits
 
-`truncateAll` refuses any database whose name does not end in `_test`. That
-check exists because the mistake already happened once: Prisma reads its
-connection URL from its own `.env` when the client is created, so a suite can
-report the test database while being connected to the development one.
+- Cancelling an Order does not cancel or refund its Stripe Payment Intent. A
+  late payment needs manual reconciliation.
+- Permanent webhook errors have no dead-letter or manual-review state.
+- A Stripe Payment Link can remain active if its local insert fails.
+- Webhooks do not verify the paid amount and currency against the frozen Order.
+- Money conversion supports only currencies with two decimal places.
+- Payment Link buyers are matched to a CLIENT by checkout email.
+- Stock email delivery is at least once, so a crash can cause a duplicate.
+- Heroku Redis TLS is encrypted but does not verify the certificate chain.
+- Password-reset rate limits are stored per web dyno, not shared.
+- Page size has no maximum because the current contract defines none.
+- File upload checks declared MIME and size, not file magic bytes or malware.
+- There is no app health endpoint, trace system, or alerting integration.
+- `npm audit` is not clean. On 2026-09-09 it reported 11 high dependency
+  nodes, or 9 with dev dependencies omitted. Recheck and upgrade safely before
+  release. Do not apply suggested major downgrades without testing.
 
-## Scope
+## Agent foundation
 
-Built:
+The AI-assisted workflow is versioned in [`CLAUDE.md`](CLAUDE.md),
+[`.claude/`](.claude), [`mcp/`](mcp), and
+[`docs/agentic-workflow.md`](docs/agentic-workflow.md).
 
-- All seven authentication operations, with session revocation and email
-- Products and SKUs, with public reads
-- Image upload to S3, with content type and size checks
-- Orders and filtered client order history
-- Stripe Payment Links, Payment Intents and idempotent signed webhooks
-- BullMQ stock notifications and scheduled webhook reconciliation
-- CASL rules for manager writes on products, SKUs and images, order access,
-  and clients managing their likes, cart and orders
-- Environment validation that stops the boot on a bad value
-- The global exception filter, the validation pipe and the `/v1` prefix
-- Helmet, CORS, and a rate limit on the password-reset flow
-- JSON logging with redaction and a request id
-- Unit and end-to-end suites, and CI
+Hooks block agents from reading real environment files or writing Git history.
+The repository owner reviews the diff, runs checks, and authors commits.
 
-Not built:
-
-- **Anything beyond the 28 operations in the contract.** No health route, no
-  `/docs` route, no admin views.
-
-## Where the requirements needed interpretation
-
-Three requirements admitted more than one reading, and one piece of review
-feedback did not say which endpoint it meant. These are the readings this
-implementation took, so a reviewer can disagree with the choice rather than
-having to discover it.
-[`docs/implementation-notes.md`](docs/implementation-notes.md) records the
-alternative that was rejected in each case and why.
-
-- **"Delete products"** is `PATCH` with `status: retired`, not `DELETE`. Orders
-  reference products, so a hard delete would either orphan an order line or take
-  a customer's purchase history with it. A database trigger enforces the reading.
-- **"Disable products"** implies a state to return to, so products have three
-  states rather than two: `active`, `inactive`, `retired`. Only `inactive` is
-  named by a requirement.
-- **"Variant-specific images"** became a many-to-many between images and SKUs
-  with a product-level fallback, because one photograph usually covers several
-  sizes of a colour and the alternative duplicates the S3 object per SKU.
-- **The endpoint removed as unnecessary** was `GET /manager/products`. The
-  feedback did not name which one; everything it offered is reachable through
-  `GET /products` as an authenticated manager.
-
-## Decisions worth knowing
-
-Cases the requirements do not name, where the plain reading would have left
-something broken.
-
-- **`TRUST_PROXY`.** The password-reset rate limit counts per client IP, and
-  Express reads that from the connection it receives. Behind a router like
-  Heroku's, every request looks like it comes from the same address, so one
-  caller would lock out everyone. This setting says how many proxies sit in
-  front. Left unset it changes nothing. `true` is refused, because Express then
-  reads the value on the left of `X-Forwarded-For`, and Heroku adds to that
-  header instead of replacing it.
-- **`PASSWORD_HASH_*`.** A safe Argon2id cost depends on the machine. A fixed
-  one either overloads a small dyno or wastes a bigger one. The defaults are
-  OWASP's baseline of 19 MiB, two passes, one lane.
-- **Secrets inside error text.** `pino` hides fields by name, but it cannot
-  reach inside a string, and a Prisma connection error prints the whole
-  connection string. The exception filter replaces known secret values in any
-  text it logs.
-- **Failures during start-up.** The exception filter only sees errors on the
-  request path. A bad configuration or an unreachable database escapes it, and
-  Node prints the raw stack. The boot now catches that, hides the secrets, and
-  writes one JSON line before exiting with a non-zero code.
-- **Values copied from `.env.example`.** Those values are in the repository, so
-  in production they are public strings sitting in secret variables. The boot
-  refuses them by exact value, and a test reads the templates and fails if a new
-  secret is not covered.
-
-## Known limitations
-
-- **`npm audit` reports 3 high advisories**, all in one chain:
-  `prisma` → `@prisma/config` → `deepmerge-ts`. Every non-breaking fix has been
-  applied, so these three are what remains rather than what has been ignored —
-  `npm audit fix` makes no further change.
-  `@prisma/client` has no dependencies and never loads any of it, so the
-  vulnerable code is not reachable from the running API. It is CLI tooling used
-  when migrating and generating. It can still show up in a production
-  dependency graph, because `prisma` is an optional peer of `@prisma/client`.
-  The only remaining fix is downgrading to `prisma@6.12`, which npm flags as
-  breaking. The real fix is tracked upstream.
-- **Stock-notification email delivery is at least once.** PostgreSQL records a
-  pending notification before BullMQ receives its id, so a Redis outage cannot
-  lose the email. If a worker sends the email and dies before recording
-  `sent_at`, reconciliation sends it again. Marking it first would trade a
-  possible duplicate for a permanently lost required notification.
-- **Reconciliation has no dead-letter cutoff.** The requirement is to retry
-  every Stripe event whose `processed_at` is null. A permanently invalid event
-  therefore remains pending and requires operator intervention; applying an age
-  limit could also abandon a recoverable payment.
-- **Order cancellation is not coordinated with Stripe.** Cancelling a pending
-  order does not cancel an already-created Payment Intent, so a later successful
-  payment cannot settle that cancelled order and remains pending for operator
-  intervention. Cancelling a paid or processing order marks it cancelled and
-  restores its stock, but this API neither creates nor records a Stripe refund;
-  the operator must issue that refund separately in Stripe.
-- **The Heroku Redis connection skips certificate checks.** Heroku signs that
-  add-on's certificate itself and publishes nothing to verify it against, so its
-  own documentation tells every client to set `rejectUnauthorized: false`. This
-  code does that only for a `rediss://` URL, which is Heroku's; the local
-  `redis://` one gets no TLS options. The traffic is still encrypted — what is
-  skipped is proving who signed it, so someone already inside Heroku's private
-  network could read the Redis password.
-- **Page size has no upper bound.** The contract's `limit` parameter is
-  `minimum: 1` with no `maximum`, so `GET /products?limit=1000000` and
-  `GET /orders?limit=1000000` are requests the delivered contract accepts, and
-  the service loads that page — orders with all of their items. A cap would be
-  the obvious hardening, and it is deliberately absent: adding one would make the
-  API answer 422 to a request the contract permits, which is a contract break
-  rather than a fix. The place to solve it is the contract, not the DTO.
-- **The rate limit counts per instance.** The throttler keeps its counters in
-  memory, so running more than one instance multiplies the effective limit. A
-  shared counter would require a Redis-backed throttler store; the stock queue
-  does not change this limitation.
-- **A failed insert can leave an active Payment Link with no local row.**
-  `POST /payment-links` creates the link at Stripe before storing it, so a
-  database failure in that window leaves a live, payable URL the API never
-  returned. Paying it produces a signed event that matches no `payment_links`
-  row, which the webhook stores unprocessed with its error and answers 204 —
-  the money is captured and visible, not lost. The scheduled reconciliation
-  producer retries events with `processed_at IS NULL`; an operator still has to
-  repair the missing local link before this particular event can succeed.
-  Deactivating the link in a compensating catch would narrow the window, not
-  close it, because that call can fail too.
-- **`STORE_CURRENCY` is only correct for two-decimal currencies.** Amounts
-  reach Stripe as `value × 100`, which is wrong for a zero-decimal currency
-  such as JPY. The contract permits any ISO code in `Currency` but its `Amount`
-  pattern is `^(0|[1-9]\d{0,7})\.\d{2}$` and the column is `decimal(10,2)`, so
-  a zero-decimal currency cannot be represented in a conforming response
-  either. Supporting one is a contract change, not a service change.
-- **The webhook trusts the amount on a verified Stripe event.** A
-  `payment_intent.succeeded` event is applied to its order without comparing
-  `amount_received` against the frozen total, so an intent repriced through the
-  Stripe API between creation and confirmation would mark the order paid for
-  the wrong amount. Signature verification authenticates the sender, not the
-  figure: `STRIPE_WEBHOOK_SECRET` and `STRIPE_SECRET_KEY` are separate trust
-  boundaries, and the comparison would also catch a divergence with no attacker
-  at all — an operator acting in the Dashboard, or a later code path that
-  creates intents elsewhere. This is accepted residual risk rather than a
-  defended position; the Payment Link path takes the opposite approach and
-  records what Stripe charged.
-
-## Design documents
-
-| File                                                           | What it holds                                         |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| [`docs/db.dbml`](docs/db.dbml)                                 | The data model: 16 tables, 21 foreign keys            |
-| [`docs/data-lifecycle.md`](docs/data-lifecycle.md)             | States, deletion, stock, sessions, notifications      |
-| [`docs/architecture.md`](docs/architecture.md)                 | Production diagram, deployment, queue, monitoring     |
-| [`docs/implementation-notes.md`](docs/implementation-notes.md) | What the database guarantees, and what only code does |
-| [`docs/agentic-workflow.md`](docs/agentic-workflow.md)         | How the repository is worked on with Claude Code      |
+See also [`docs/architecture.md`](docs/architecture.md),
+[`docs/data-lifecycle.md`](docs/data-lifecycle.md),
+[`docs/implementation-notes.md`](docs/implementation-notes.md), and
+[`docs/db.dbml`](docs/db.dbml).
