@@ -58,8 +58,9 @@ interface LockedCartItem {
 }
 
 interface ProcessedPayment {
-  orderId: string;
+  orderId: string | null;
   notificationIds: string[];
+  reason?: string;
 }
 
 interface StockMutation {
@@ -88,6 +89,12 @@ const referencedId = (value: { id: string } | string | null): string | null =>
   typeof value === 'string' ? value : (value?.id ?? null);
 
 const processingError = (message: string): Error => new Error(message);
+
+const settledWithoutOrder = (reason: string): ProcessedPayment => ({
+  orderId: null,
+  notificationIds: [],
+  reason,
+});
 
 @Injectable()
 export class StripeWebhookService {
@@ -174,7 +181,7 @@ export class StripeWebhookService {
           data: {
             orderId: processed.orderId,
             processedAt: new Date(),
-            errorMessage: null,
+            errorMessage: processed.reason ?? null,
           },
         });
 
@@ -203,14 +210,19 @@ export class StripeWebhookService {
     const intent = event.data.object;
     const orderId = intent.metadata.orderId;
 
-    if (intent.status !== 'succeeded' || !orderId) {
+    if (intent.status !== 'succeeded') {
       throw processingError('Payment Intent event is missing payment data');
     }
 
     const order = await transaction.order.findUnique({
-      where: { id: orderId },
+      where: orderId ? { id: orderId } : { stripePaymentIntentId: intent.id },
       select: ORDER_FOR_PAYMENT_SELECT,
     });
+    if (!order && !orderId) {
+      return settledWithoutOrder(
+        'Payment Intent is not associated with a local order; no business action was applied',
+      );
+    }
     if (!order || order.paymentMethod !== PaymentMethod.PAYMENT_INTENT) {
       throw processingError('Payment Intent order was not found');
     }

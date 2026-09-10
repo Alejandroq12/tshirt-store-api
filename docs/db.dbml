@@ -440,6 +440,8 @@ Table stripe_webhook_events {
     decrements every order line and applies the related order and cart changes.
     An insufficient line leaves those mutations uncommitted and records the
     event error for retry or reconciliation; stock is never partly decremented.
+    A succeeded Payment Intent that matches no order by id or stored intent id
+    is marked processed with that reason and no order.
 
     The stock-notification queue adds the scheduled producer that scans
     processed_at IS NULL and enqueues event IDs. Reconciliation workers then

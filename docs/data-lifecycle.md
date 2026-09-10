@@ -79,7 +79,11 @@ operation; it does not expose a DELETE unlike operation.
 - A 204 webhook response acknowledges durable event receipt, not completed
   business processing. A scheduled producer enqueues stored events with
   `processed_at IS NULL`; reconciliation workers claim them without overlap and
-  rerun the same idempotent handler until processing succeeds.
+  rerun the same idempotent handler until processing succeeds. A succeeded
+  Payment Intent that matches no local order by id or by stored intent id — in
+  practice the one Stripe emits alongside a Checkout Session — is marked
+  processed with that reason recorded and no business action, so it is not
+  retried.
 - For a Payment Intent, cart reconciliation subtracts the frozen order quantity
   from the current cart quantity for each SKU. A positive remainder is kept,
   a zero-or-negative remainder deletes the row, and a missing row is ignored.

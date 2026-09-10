@@ -496,6 +496,162 @@ describe('Checkout and Stripe payments (e2e)', () => {
     expect(cartItem.quantity).toBe(4);
   });
 
+  const checkoutIntentEvent = (intentId: string) => ({
+    id: `evt_${randomUUID()}`,
+    type: 'payment_intent.succeeded',
+    created: Math.floor(Date.now() / 1000),
+    data: { object: { id: intentId, status: 'succeeded', metadata: {} } },
+  });
+
+  const checkoutSessionEvent = (email: string, intentId: string) => ({
+    id: `evt_${randomUUID()}`,
+    type: 'checkout.session.completed',
+    created: Math.floor(Date.now() / 1000),
+    data: {
+      object: {
+        id: `cs_${randomUUID()}`,
+        payment_link: 'plink_checkout',
+        payment_intent: intentId,
+        payment_status: 'paid',
+        amount_total: 5000,
+        customer_details: { email },
+      },
+    },
+  });
+
+  const createPaymentLinkFor = async (skuId: string) => {
+    const manager = await createManager(prisma);
+    const managerToken = await login(manager);
+    await request(app.getHttpServer())
+      .post('/v1/payment-links')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ skuId, quantity: 2 })
+      .expect(201);
+  };
+
+  it('settles the Payment Intent Stripe emits for a Checkout Session before the session creates the order', async () => {
+    const client = await createClient(prisma, {
+      email: 'link-first@example.com',
+    });
+    const { sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      price: '25.00',
+      stockQuantity: 5,
+    });
+    await createPaymentLinkFor(sku.id);
+    const intentId = `pi_${randomUUID()}`;
+
+    const intentEvent = checkoutIntentEvent(intentId);
+    await postWebhook(intentEvent).expect(204);
+
+    const settledIntent = await prisma.stripeWebhookEvent.findUniqueOrThrow({
+      where: { stripeEventId: intentEvent.id },
+    });
+    expect(settledIntent).toMatchObject({
+      orderId: null,
+      errorMessage:
+        'Payment Intent is not associated with a local order; no business action was applied',
+    });
+    expect(settledIntent.processedAt).toBeInstanceOf(Date);
+    await expect(prisma.order.count()).resolves.toBe(0);
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 5 });
+
+    const sessionEvent = checkoutSessionEvent(client.email, intentId);
+    await postWebhook(sessionEvent).expect(204);
+
+    await expect(
+      prisma.order.findFirstOrThrow({ where: { clientId: client.id } }),
+    ).resolves.toMatchObject({
+      status: OrderStatus.PAID,
+      paymentMethod: PaymentMethod.PAYMENT_LINK,
+      stripeCheckoutSessionId: sessionEvent.data.object.id,
+    });
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 3 });
+    await expect(
+      prisma.stripeWebhookEvent.count({ where: { processedAt: null } }),
+    ).resolves.toBe(0);
+  });
+
+  it('settles the Payment Intent Stripe emits for a Checkout Session after the session created the order, decrementing stock once', async () => {
+    const client = await createClient(prisma, {
+      email: 'session-first@example.com',
+    });
+    const { sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      price: '25.00',
+      stockQuantity: 5,
+    });
+    await createPaymentLinkFor(sku.id);
+    const intentId = `pi_${randomUUID()}`;
+
+    await postWebhook(checkoutSessionEvent(client.email, intentId)).expect(204);
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 3 });
+
+    const intentEvent = checkoutIntentEvent(intentId);
+    await postWebhook(intentEvent).expect(204);
+
+    const settledIntent = await prisma.stripeWebhookEvent.findUniqueOrThrow({
+      where: { stripeEventId: intentEvent.id },
+    });
+    expect(settledIntent).toMatchObject({ orderId: null });
+    expect(settledIntent.processedAt).toBeInstanceOf(Date);
+    await expect(prisma.order.count()).resolves.toBe(1);
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 3 });
+    await expect(
+      prisma.stripeWebhookEvent.count({ where: { processedAt: null } }),
+    ).resolves.toBe(0);
+  });
+
+  it('pays the order found by its stored intent id when the succeeded event carries no order id', async () => {
+    const client = await createClient(prisma);
+    const token = await login(client);
+    const { sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      stockQuantity: 10,
+    });
+    await request(app.getHttpServer())
+      .post('/v1/me/cart/items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ skuId: sku.id, quantity: 2 })
+      .expect(201);
+    const orderResponse = await request(app.getHttpServer())
+      .post('/v1/orders')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+    const orderId = (orderResponse.body as CreatedOrderBody).id;
+    await request(app.getHttpServer())
+      .post('/v1/payment-intents')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ orderId })
+      .expect(201);
+
+    const strippedEvent = checkoutIntentEvent('pi_checkout');
+    await postWebhook(strippedEvent).expect(204);
+
+    await expect(
+      prisma.order.findUniqueOrThrow({ where: { id: orderId } }),
+    ).resolves.toMatchObject({
+      status: OrderStatus.PAID,
+      stripePaymentIntentId: 'pi_checkout',
+    });
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 8 });
+    await expect(
+      prisma.stripeWebhookEvent.findUniqueOrThrow({
+        where: { stripeEventId: strippedEvent.id },
+      }),
+    ).resolves.toMatchObject({ orderId, errorMessage: null });
+  });
+
   it('rolls back every payment effect and keeps the event pending when stock changed', async () => {
     const client = await createClient(prisma);
     const token = await login(client);

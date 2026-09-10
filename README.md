@@ -267,7 +267,9 @@ Editor.
 
 - Cancelling an Order does not cancel or refund its Stripe Payment Intent. A
   late payment needs manual reconciliation.
-- Permanent webhook errors have no dead-letter or manual-review state.
+- Permanent webhook errors have no dead-letter state. Only a succeeded Payment
+  Intent that matches no local order — in practice the one Stripe emits
+  alongside a Checkout Session — is marked processed, with the reason recorded.
 - A Stripe Payment Link can remain active if its local insert fails.
 - Webhooks do not verify the paid amount and currency against the frozen Order.
 - Money conversion supports only currencies with two decimal places.

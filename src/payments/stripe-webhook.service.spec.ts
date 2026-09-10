@@ -519,6 +519,90 @@ describe('StripeWebhookService', () => {
     expect(eventUpdateOutside).toHaveBeenCalled();
   });
 
+  it('still leaves a Payment Link event pending when the link itself is unknown', async () => {
+    eventFindUnique.mockResolvedValue(storedEvent(checkoutEvent));
+    orderFindUnique.mockResolvedValue(null);
+    paymentLinkFindUnique.mockResolvedValue(null);
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Checkout Session cannot be matched locally',
+    );
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalled();
+  });
+
+  it('settles a succeeded Payment Intent that matches no local order by id or by stored intent', async () => {
+    const checkoutIntentEvent = {
+      ...paymentIntentEvent,
+      id: 'evt_intent_from_checkout',
+      data: {
+        object: {
+          ...paymentIntentEvent.data.object,
+          id: 'pi_from_checkout',
+          metadata: {},
+        },
+      },
+    } as unknown as Stripe.PaymentIntentSucceededEvent;
+    eventFindUnique.mockResolvedValue(storedEvent(checkoutIntentEvent));
+    orderFindUnique.mockResolvedValue(null);
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+    expect(orderFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { stripePaymentIntentId: 'pi_from_checkout' },
+      }),
+    );
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(eventUpdate).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID },
+      data: {
+        orderId: null,
+        processedAt: expect.any(Date) as Date,
+        errorMessage:
+          'Payment Intent is not associated with a local order; no business action was applied',
+      },
+    });
+    expect(eventUpdateOutside).not.toHaveBeenCalled();
+  });
+
+  it('settles the order found by stored intent id when the metadata carries no order id', async () => {
+    const strippedIntentEvent = {
+      ...paymentIntentEvent,
+      id: 'evt_intent_stripped',
+      data: {
+        object: { ...paymentIntentEvent.data.object, metadata: {} },
+      },
+    } as unknown as Stripe.PaymentIntentSucceededEvent;
+    eventFindUnique.mockResolvedValue(storedEvent(strippedIntentEvent));
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+    expect(orderFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { stripePaymentIntentId: 'pi_1' } }),
+    );
+    expect(orderUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: ORDER_ID,
+        status: OrderStatus.PENDING,
+        paymentMethod: PaymentMethod.PAYMENT_INTENT,
+        stripePaymentIntentId: 'pi_1',
+      },
+      data: {
+        status: OrderStatus.PAID,
+        stripePaymentIntentId: 'pi_1',
+        paidAt: new Date(EVENT_TIME * 1000),
+      },
+    });
+    expect(eventUpdate).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID },
+      data: {
+        orderId: ORDER_ID,
+        processedAt: expect.any(Date) as Date,
+        errorMessage: null,
+      },
+    });
+  });
+
   it('does no business work when a stored event is already processed', async () => {
     eventFindUnique.mockResolvedValue(
       storedEvent(paymentIntentEvent, new Date()),
