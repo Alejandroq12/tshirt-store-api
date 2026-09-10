@@ -340,7 +340,13 @@ something broken.
   intervention. Cancelling a paid or processing order marks it cancelled and
   restores its stock, but this API neither creates nor records a Stripe refund;
   the operator must issue that refund separately in Stripe.
-
+- **The Heroku Redis connection skips certificate checks.** Heroku signs that
+  add-on's certificate itself and publishes nothing to verify it against, so its
+  own documentation tells every client to set `rejectUnauthorized: false`. This
+  code does that only for a `rediss://` URL, which is Heroku's; the local
+  `redis://` one gets no TLS options. The traffic is still encrypted — what is
+  skipped is proving who signed it, so someone already inside Heroku's private
+  network could read the Redis password.
 - **Page size has no upper bound.** The contract's `limit` parameter is
   `minimum: 1` with no `maximum`, so `GET /products?limit=1000000` and
   `GET /orders?limit=1000000` are requests the delivered contract accepts, and
