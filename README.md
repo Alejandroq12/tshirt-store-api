@@ -128,7 +128,7 @@ exponential backoff. A scan runs every 30 seconds to recover pending work.
 - **Staging environment:** Dedicated Heroku staging app with isolated PostgreSQL.
 - **Disaster recovery tested:** Production backup successfully restored and verified in staging.
 - **Deployment pipeline:** GitHub -> CI -> Staging -> manual promotion -> Production.
-- **Operational monitoring:** Heroku metrics for latency, errors, memory, throughput, and dyno load.
+- **Operational monitoring:** Heroku metrics and alerts cover latency, errors, memory, throughput, and dyno load.
 - **Shared infrastructure:** PostgreSQL as durable state and Redis/BullMQ for background processing.
 
 The CI workflow verifies code but does not contain the Heroku deployment step.
@@ -146,6 +146,9 @@ web: node dist/main.js
 Production is at <https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1>. There is
 no `/` route. Use `/products?limit=20&offset=0` to check it. Production email
 uses Mailtrap with the verified `quezadajulio.com` domain.
+
+Staging check: <https://t-shirt-api-staging-57d7357dcda2.herokuapp.com/v1/products?limit=20&offset=0>.
+It uses isolated test data and may be reset.
 
 ## Local setup
 
@@ -274,7 +277,8 @@ Editor.
 - Password-reset rate limits are stored per web dyno, not shared.
 - Page size has no maximum because the current contract defines none.
 - File upload checks declared MIME and size, not file magic bytes or malware.
-- There is no app health endpoint, trace system, or alerting integration.
+- There is no app health endpoint or tracing. Alerts are configured in Heroku,
+  not inside the NestJS application.
 - `npm audit` is not clean. On 2026-09-09 it reported 11 high dependency
   nodes, or 9 with dev dependencies omitted. Recheck and upgrade safely before
   release. Do not apply suggested major downgrades without testing.
