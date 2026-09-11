@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 
-import type { EnvironmentVariables } from '../config/env.validation';
+import type { EnvironmentVariables } from '../../config/env.validation';
 import { PasswordService } from './password.service';
 
 const TEST_COST: Partial<EnvironmentVariables> = {

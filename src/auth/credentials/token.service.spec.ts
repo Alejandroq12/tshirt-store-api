@@ -6,7 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { sign } from 'jsonwebtoken';
 
-import type { EnvironmentVariables } from '../config/env.validation';
+import type { EnvironmentVariables } from '../../config/env.validation';
 import { TokenService } from './token.service';
 
 const ENVIRONMENT: Partial<EnvironmentVariables> = {
