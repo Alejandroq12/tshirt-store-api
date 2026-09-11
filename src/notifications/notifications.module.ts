@@ -5,14 +5,14 @@ import { BullModule } from '@nestjs/bullmq';
 import type { EnvironmentVariables } from '../config/env.validation';
 import { MailModule } from '../mail/mail.module';
 import { PrismaModule } from '../prisma/prisma.module';
-import { ReconciliationProducer } from './reconciliation.producer';
+import { ReconciliationProducer } from './reconciliation/reconciliation.producer';
 import {
   RECONCILIATION_QUEUE,
   STOCK_NOTIFICATION_QUEUE,
 } from './stock-notification.queue';
-import { StockCycleService } from './stock-cycle.service';
-import { StockNotificationProducer } from './stock-notification.producer';
-import { StockNotificationWorker } from './stock-notification.worker';
+import { StockCycleService } from './stock-cycle/stock-cycle.service';
+import { StockNotificationProducer } from './delivery/stock-notification.producer';
+import { StockNotificationWorker } from './delivery/stock-notification.worker';
 
 @Module({
   imports: [

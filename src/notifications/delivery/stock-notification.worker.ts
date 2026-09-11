@@ -2,13 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 
-import { MailService } from '../mail/mail.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../../mail/mail.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   SEND_STOCK_NOTIFICATION_JOB,
   STOCK_NOTIFICATION_QUEUE,
   type StockNotificationJob,
-} from './stock-notification.queue';
+} from '../stock-notification.queue';
 
 const escapeHtml = (value: string): string =>
   value.replace(

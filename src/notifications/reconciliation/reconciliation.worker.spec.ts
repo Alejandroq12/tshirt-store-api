@@ -1,15 +1,15 @@
 import { Prisma } from '@prisma/client';
 import type { Job } from 'bullmq';
 
-import type { StripeWebhookService } from '../payments/stripe-webhook.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { StripeWebhookService } from '../../payments/webhook/stripe-webhook.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import type { ReconciliationProducer } from './reconciliation.producer';
 import {
   PROCESS_STRIPE_EVENT_JOB,
   SCAN_PENDING_JOB,
   type StripeReconciliationJob,
-} from './stock-notification.queue';
-import type { StockNotificationProducer } from './stock-notification.producer';
+} from '../stock-notification.queue';
+import type { StockNotificationProducer } from '../delivery/stock-notification.producer';
 import { ReconciliationWorker } from './reconciliation.worker';
 
 const EVENT_ID = '11111111-1111-4111-8111-111111111111';

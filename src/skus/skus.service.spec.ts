@@ -4,8 +4,8 @@ import { Prisma } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import type { EnvironmentVariables } from '../config/env.validation';
-import type { StockCycleService } from '../notifications/stock-cycle.service';
-import type { StockNotificationProducer } from '../notifications/stock-notification.producer';
+import type { StockCycleService } from '../notifications/stock-cycle/stock-cycle.service';
+import type { StockNotificationProducer } from '../notifications/delivery/stock-notification.producer';
 import type { PrismaService } from '../prisma/prisma.service';
 import { SkusService } from './skus.service';
 

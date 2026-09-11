@@ -10,7 +10,7 @@ import {
   RETRYABLE_JOB_OPTIONS,
   SCAN_PENDING_JOB,
   type StripeReconciliationJob,
-} from './stock-notification.queue';
+} from '../stock-notification.queue';
 
 type ReconciliationJob = StripeReconciliationJob | Record<string, never>;
 
