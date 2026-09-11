@@ -3,11 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma, UserRole } from '@prisma/client';
 import type Stripe from 'stripe';
 
-import type { EnvironmentVariables } from '../config/env.validation';
-import { StockCycleService } from '../notifications/stock-cycle.service';
-import { StockNotificationProducer } from '../notifications/stock-notification.producer';
-import { PrismaService } from '../prisma/prisma.service';
-import { StripeClient } from './stripe.client';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
+import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
+import { PrismaService } from '../../prisma/prisma.service';
+import { StripeClient } from '../stripe/stripe.client';
 
 const PAYMENT_LINK_SELECT = {
   id: true,

@@ -3,12 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 import type Stripe from 'stripe';
 
-import type { EnvironmentVariables } from '../config/env.validation';
-import type { StockCycleService } from '../notifications/stock-cycle.service';
-import type { StockNotificationProducer } from '../notifications/stock-notification.producer';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import type { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
+import type { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { StripeWebhookService } from './stripe-webhook.service';
-import type { StripeClient } from './stripe.client';
+import type { StripeClient } from '../stripe/stripe.client';
 
 const STORED_EVENT_ID = '11111111-1111-4111-8111-111111111111';
 const ORDER_ID = '22222222-2222-4222-8222-222222222222';

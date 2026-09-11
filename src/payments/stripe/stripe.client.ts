@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 
-import type { EnvironmentVariables } from '../config/env.validation';
+import type { EnvironmentVariables } from '../../config/env.validation';
 
 @Injectable()
 export class StripeClient {
