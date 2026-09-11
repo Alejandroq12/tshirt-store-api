@@ -1,0 +1,26 @@
+ok      3  src
+OVER   14  src/auth
+ok      4  src/auth/decorators
+ok      2  src/auth/guards
+ok      6  src/authorization
+ok      1  src/authorization/decorators
+ok      2  src/authorization/guards
+ok      6  src/cart
+ok      0  src/common
+ok      2  src/common/filters
+ok      7  src/common/problems
+ok      1  src/common/validation
+ok      8  src/config
+ok      7  src/images
+ok      7  src/logging
+ok      4  src/mail
+OVER   12  src/notifications
+ok      8  src/orders
+OVER   11  src/payments
+ok      3  src/prisma
+ok      6  src/products
+ok      4  src/security
+ok      6  src/skus
+ok      6  src/storage
+structure: folders marked OVER must be grouped by responsibility (limit 10)
+exit 1

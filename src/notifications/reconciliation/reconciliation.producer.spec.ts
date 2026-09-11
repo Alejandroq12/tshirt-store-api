@@ -8,7 +8,7 @@ import {
   RETRYABLE_JOB_OPTIONS,
   SCAN_PENDING_JOB,
   type StripeReconciliationJob,
-} from './stock-notification.queue';
+} from '../stock-notification.queue';
 
 const EVENT_ID = '11111111-1111-4111-8111-111111111111';
 

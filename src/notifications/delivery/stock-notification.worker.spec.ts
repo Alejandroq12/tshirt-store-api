@@ -1,11 +1,11 @@
 import type { Job } from 'bullmq';
 
-import type { MailService } from '../mail/mail.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { MailService } from '../../mail/mail.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import {
   SEND_STOCK_NOTIFICATION_JOB,
   type StockNotificationJob,
-} from './stock-notification.queue';
+} from '../stock-notification.queue';
 import { StockNotificationWorker } from './stock-notification.worker';
 
 const NOTIFICATION_ID = '11111111-1111-4111-8111-111111111111';

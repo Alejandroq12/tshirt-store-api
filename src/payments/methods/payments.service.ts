@@ -8,19 +8,19 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma, UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
 import {
   PROBLEM_TYPE,
   type ProblemDetail,
   ProblemException,
-} from '../common/problems';
-import type { EnvironmentVariables } from '../config/env.validation';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../../common/problems';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   PaymentIntentCreateRequest,
   PaymentLinkCreateRequest,
 } from './payments.dto';
-import { StripeClient } from './stripe.client';
+import { StripeClient } from '../stripe/stripe.client';
 
 const SKU_FOR_LINK_SELECT = {
   id: true,

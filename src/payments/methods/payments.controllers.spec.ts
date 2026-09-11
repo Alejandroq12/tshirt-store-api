@@ -6,15 +6,15 @@ import {
   PATH_METADATA,
 } from '@nestjs/common/constants';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
-import { IS_PUBLIC } from '../auth/decorators/public.decorator';
-import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
-import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import { IS_PUBLIC } from '../../auth/decorators/public.decorator';
+import { REQUIRED_ABILITIES } from '../../authorization/decorators/check-abilities.decorator';
+import { AbilitiesGuard } from '../../authorization/guards/abilities.guard';
 import { PaymentIntentsController } from './payment-intents.controller';
 import { PaymentLinksController } from './payment-links.controller';
 import type { PaymentsService } from './payments.service';
-import { StripeWebhookController } from './stripe-webhook.controller';
-import type { StripeWebhookService } from './stripe-webhook.service';
+import { StripeWebhookController } from '../webhook/stripe-webhook.controller';
+import type { StripeWebhookService } from '../webhook/stripe-webhook.service';
 
 const methodTarget = (controller: object, method: string): object => {
   const target = Object.getOwnPropertyDescriptor(

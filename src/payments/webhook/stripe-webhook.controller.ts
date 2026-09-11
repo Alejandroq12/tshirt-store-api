@@ -9,7 +9,7 @@ import {
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 
-import { Public } from '../auth/decorators/public.decorator';
+import { Public } from '../../auth/decorators/public.decorator';
 import { StripeWebhookService } from './stripe-webhook.service';
 
 @Controller('webhooks/stripe')

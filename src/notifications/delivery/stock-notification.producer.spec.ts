@@ -4,7 +4,7 @@ import {
   RETRYABLE_JOB_OPTIONS,
   SEND_STOCK_NOTIFICATION_JOB,
   type StockNotificationJob,
-} from './stock-notification.queue';
+} from '../stock-notification.queue';
 import { StockNotificationProducer } from './stock-notification.producer';
 
 const NOTIFICATION_ID = '11111111-1111-4111-8111-111111111111';

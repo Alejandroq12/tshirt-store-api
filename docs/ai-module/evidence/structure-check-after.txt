@@ -1,0 +1,55 @@
+structure-check — label: after — 2026-09-10 23:23 CST
+branch: feat/agentic-workflow @ 1fafe8c
+
+== rule: .claude/skills/structure-check/scripts/check.sh ==
+ok      3  src
+ok      8  src/auth
+ok      6  src/auth/credentials
+ok      4  src/auth/decorators
+ok      2  src/auth/guards
+ok      6  src/authorization
+ok      1  src/authorization/decorators
+ok      2  src/authorization/guards
+ok      6  src/cart
+ok      0  src/common
+ok      2  src/common/filters
+ok      7  src/common/problems
+ok      1  src/common/validation
+ok      8  src/config
+ok      7  src/images
+ok      7  src/logging
+ok      4  src/mail
+ok      2  src/notifications
+ok      4  src/notifications/delivery
+ok      4  src/notifications/reconciliation
+ok      2  src/notifications/stock-cycle
+ok      8  src/orders
+ok      1  src/payments
+ok      6  src/payments/methods
+ok      1  src/payments/stripe
+ok      3  src/payments/webhook
+ok      3  src/prisma
+ok      6  src/products
+ok      4  src/security
+ok      6  src/skus
+ok      6  src/storage
+structure: every folder under src holds at most 10 files
+exit: 0
+
+== gate ==
+npm run typecheck   exit: 0   tsc --noEmit clean
+npm run lint        exit: 0   eslint --max-warnings 0 clean
+npm run build       exit: 0   nest build ok
+npm run test:ci     exit: 0   Test Suites: 43 passed, 43 total
+                             Tests:       506 passed, 506 total
+                             coverage thresholds met (no threshold failure reported)
+
+== e2e: npm run test:e2e, run in a plain terminal (not under this skill) ==
+PASS test/http-contract.e2e-spec.ts
+PASS test/bootstrap.e2e-spec.ts
+
+Test Suites: 11 passed, 11 total
+Tests:       96 passed, 96 total
+Snapshots:   0 total
+Time:        69.365 s, estimated 70 s
+Ran all test suites.

@@ -7,11 +7,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
-import type { EnvironmentVariables } from '../config/env.validation';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { PaymentsService } from './payments.service';
-import type { StripeClient } from './stripe.client';
+import type { StripeClient } from '../stripe/stripe.client';
 
 const SKU_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PRODUCT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

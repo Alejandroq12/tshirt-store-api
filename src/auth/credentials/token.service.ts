@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
 
-import type { EnvironmentVariables } from '../config/env.validation';
-import type { AuthenticatedUser } from './authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import type { AuthenticatedUser } from '../authenticated-user';
 
 const ALGORITHMS = ['HS256'] as const;
 

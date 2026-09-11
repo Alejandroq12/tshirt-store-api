@@ -3,16 +3,16 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Prisma } from '@prisma/client';
 import type { Job } from 'bullmq';
 
-import { StripeWebhookService } from '../payments/stripe-webhook.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { StripeWebhookService } from '../../payments/webhook/stripe-webhook.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { ReconciliationProducer } from './reconciliation.producer';
 import {
   PROCESS_STRIPE_EVENT_JOB,
   RECONCILIATION_QUEUE,
   SCAN_PENDING_JOB,
   type StripeReconciliationJob,
-} from './stock-notification.queue';
-import { StockNotificationProducer } from './stock-notification.producer';
+} from '../stock-notification.queue';
+import { StockNotificationProducer } from '../delivery/stock-notification.producer';
 
 const BATCH_SIZE = 100;
 

@@ -7,7 +7,7 @@ import {
   SEND_STOCK_NOTIFICATION_JOB,
   STOCK_NOTIFICATION_QUEUE,
   type StockNotificationJob,
-} from './stock-notification.queue';
+} from '../stock-notification.queue';
 
 @Injectable()
 export class StockNotificationProducer {
