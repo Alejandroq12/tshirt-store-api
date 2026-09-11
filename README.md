@@ -71,8 +71,8 @@ src/skus/              product variants
 src/images/            S3 image upload and assignments
 src/cart/              client cart
 src/orders/            snapshots, history, and status changes
-src/payments/          Stripe links, intents, and webhooks
-src/notifications/     stock cycles, BullMQ jobs, and reconciliation
+src/payments/          methods/, webhook/, stripe/ — links, intents, settlement, SDK
+src/notifications/     stock-cycle/, delivery/, reconciliation/
 src/authorization/     CASL permissions
 src/common/            validation and Problem Details errors
 src/config,logging/    validated configuration and safe logs
