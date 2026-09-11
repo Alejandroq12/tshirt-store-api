@@ -1,0 +1,35 @@
+
+> tshirt-store-api@0.0.1 test:e2e
+> npm run db:migrate:test && jest --config ./test/jest-e2e.json --runInBand
+
+
+> tshirt-store-api@0.0.1 db:migrate:test
+> dotenv -e .env.test -- prisma migrate deploy
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma config detected, skipping environment variable loading.
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "tshirt_store_test", schema "public" at "localhost:5433"
+
+3 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+PASS test/checkout.e2e-spec.ts
+PASS test/products.e2e-spec.ts
+PASS test/auth.e2e-spec.ts
+PASS test/skus.e2e-spec.ts
+PASS test/images.e2e-spec.ts
+PASS test/order-history.e2e-spec.ts
+PASS test/http-contract.e2e-spec.ts
+PASS test/bootstrap.e2e-spec.ts
+PASS test/database.e2e-spec.ts
+PASS test/auth-notification-failure.e2e-spec.ts
+PASS test/fatal-startup.e2e-spec.ts (62.124 s)
+
+Test Suites: 11 passed, 11 total
+Tests:       93 passed, 93 total
+Snapshots:   0 total
+Time:        70.74 s
+Ran all test suites.
