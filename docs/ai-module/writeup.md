@@ -27,7 +27,11 @@ after the move. Setup: `chmod +x` on the three scripts, and Docker for the
 final e2e run. The scripts change nothing under `src/`; `run.sh` writes only
 its evidence file. Every move is a `git mv`, so history survives
 (`git log --follow`) and rollback is `git revert` of one commit per folder.
-No migration, no contract change, no runtime change.
+Between `b5d0387`, where `dev` stands, and this branch, `src/` changes are 26
+renames and import paths in 13 files, every changed line an `import` or
+`export … from` (`git diff -M b5d0387 HEAD -- src prisma api`): no migration,
+no contract change, no runtime change. A diff without rename detection shows
+the moved payment files as new.
 
 ## Project Results
 

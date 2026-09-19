@@ -11,6 +11,8 @@ cd "$(git rev-parse --show-toplevel)"
 root="${1:-src}"
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
+case "$root" in -*|/*|*..*) echo "root must be a relative directory inside the repository: $root" >&2; exit 2;; esac
+[ -d "$root" ] || { echo "root is not a directory: $root" >&2; exit 2; }
 status=0
 
 for dir in $(find "$root" -type d | sort); do

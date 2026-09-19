@@ -5,7 +5,8 @@ description: Executable check that no folder under src is both over a file limit
 
 # Checking folder structure
 
-Run `.claude/skills/structure-check/scripts/run.sh <label>`. It does two things,
+Run `.claude/skills/structure-check/scripts/run.sh <label>`, the label being
+letters, digits, `-` and `_`. It does two things,
 always both, and combines their exit codes into one verdict. The gate runs
 whether or not the rule passed: a tree still over the limit is a half-finished
 reorganisation, which is where a broken import is most likely, and `tsc` is

@@ -13,6 +13,9 @@ label="${1:-}"
 root="${ROOT:-src}"
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
+case "$root" in -*|/*|*..*) echo "root must be a relative directory inside the repository: $root" >&2; exit 2;; esac
+[ -d "$root" ] || { echo "root is not a directory: $root" >&2; exit 2; }
+case "$label" in *[!A-Za-z0-9_-]*) echo "label must use only letters, digits, - and _: $label" >&2; exit 2;; esac
 gate=(typecheck lint build test:ci)
 
 work="$(mktemp -d)"
