@@ -35,8 +35,11 @@ proposes the grouping or records why the folder stays. It changes nothing.
    - the `*.module.ts` stays at the folder root, so `app.module.ts` is untouched;
    - a file two groups share stays at the root;
    - a spec moves with its subject;
-   - name each group after what its files do, with a word the challenge or the
-     docs already use.
+   - name each group after what its files do, with a word `CLAUDE.md`,
+     `README.md`, `api/openapi.yaml` or `docs/architecture.md` already uses:
+     `methods` and `webhook` from the contract's "Webhook handling for both
+     Stripe payment methods", `reconciliation` from the architecture's
+     "scheduled reconciliation scan".
 3. List the lines behind the score with `SHOW=1 … audit.sh`, which prints
    them under each folder, and keep those that name a file that moves.
 4. List the docs that draw the layout: `grep -n "<folder>/" CLAUDE.md README.md`.
@@ -48,13 +51,15 @@ proposes the grouping or records why the folder stays. It changes nothing.
 
 ## Rules
 
-- Read-only. Do not move or edit anything under `src/` or `test/`.
+- The audit writes its two evidence files and nothing else; the moves come
+  afterwards, one folder per commit, and `structure-check` proves each one.
 - The script finds a smell; the grouping stays a judgment call. The stem is a
   proxy for the responsibility: say why when the two disagree, as
   `secret-token.service.ts` in `credentials/` rather than `tokens/`.
 - The crossing count resolves every quoted relative or `src`-rooted path
   against the file that holds it; a path built at runtime or through an alias
   is not counted.
-- Never propose a folder whose name is not a responsibility (`misc`, `utils`,
-  `other` are refused).
-- Quote real file names; do not summarise a folder as "various services".
+- A folder name states a responsibility: `payments/webhook` and
+  `auth/credentials` are accepted, `payments/misc` is not.
+- Name files as they are: `stripe-webhook.service.ts`, not "various
+  services".

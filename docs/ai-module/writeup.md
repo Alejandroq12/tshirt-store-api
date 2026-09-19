@@ -49,8 +49,10 @@ old tree and green after: `auth` went from 14 files across 6 stems to 8
 across 3 plus `credentials/` at 6 across 3, and `payments` from 11 across 5
 to four folders of 1 to 3 stems. The gate ran after every commit. My
 judgment went into the group names
-(`methods` from the challenge's "both payment methods"; `delivery`,
-`reconciliation` and `credentials` from the docs), what stays at the root
+(`methods` from the contract's "both Stripe payment methods" and
+`credentials` from its "Authentication credentials"; `reconciliation` from
+the architecture's "reconciliation scan" and `delivery` from the README's
+"stock email delivery"), what stays at the root
 (the module, and `stock-notification.queue.ts` because both pipelines and a
 test import it), the limit itself, and keeping one `credentials/` folder
 where the audit proposed `credentials/` plus `tokens/`. Three two-file

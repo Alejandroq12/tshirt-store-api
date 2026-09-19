@@ -28,7 +28,8 @@ what finds it.
    Defaults are 10 files and 3 stems, printed in the output. Three is where
    this codebase's grouped folders landed: the feature's own stem, its barrel
    and one shared file. `LIMIT=8 STEMS=2 ROOT=test … run.sh` changes any of
-   them, and none is moved to make a run pass.
+   them for another root or a stricter rule; a run that fails at the defaults
+   is reported at the defaults.
 
 2. **The gate.** `npm run typecheck`, `npm run lint`, `npm run build`,
    `npm run test:ci`, in that order. A failing command ends the gate and the
@@ -44,15 +45,16 @@ with the verdict line.
 
 ## Rules
 
-- Never edit a file to make the check pass; report the failure.
+- A rule exit of 1 is a valid result, reported, not repaired: name the
+  folders marked `OVER`, show the gate beside them, and stop. The two answer
+  different questions, and the regrouping is `structure-audit`'s proposal
+  and a commit of its own, which this check then proves.
 - The rule finds a smell; the grouping stays a judgment call. The stem is a
   proxy for the responsibility: two stems can be one responsibility, as in
   `config`, and one stem can hide two. A `mixed` folder is not a failure:
   `structure-audit` lists every folder this check does not mark `ok` and
   records a verdict for each, and the file limit is what turns a growing junk
   drawer into `OVER`.
-- A rule exit of 1 is a valid result. Report which folders are `OVER`, and the
-  gate beside it: the two answer different questions.
-- Do not run the e2e suite from this skill; it needs Docker and takes minutes.
-  Say so, and let the caller run `npm run test:e2e` once at the end and append
-  its tail to the evidence file.
+- The e2e suite runs once at the end, by the caller, in a plain terminal:
+  `npm run test:e2e` needs Docker and takes minutes. Say so, and append its
+  tail to the evidence file.
