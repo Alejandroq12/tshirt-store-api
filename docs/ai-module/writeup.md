@@ -10,20 +10,22 @@ being the responsibility in this codebase. Each is now split into subfolders
 named after what the files do, such as `payments/methods`, `payments/webhook`
 and `payments/stripe`, and every grouped folder holds 1 to 3 stems. A rule
 script (`check.sh`: a folder fails when it is over 10 files across more than
-3 stems) fails on the old tree and passes on the new one. `typecheck`,
-`lint`, `build` and the unit suite pass after every move, and the e2e suite
-passes at the end. The contract tooling still finds 28 of 28 operations.
+3 stems) fails on the old tree and passes on the new one, and the check
+verifies the audit's proposal path by path, every departure recorded with
+its reason. `typecheck`, `lint`, `build` and the unit suite pass after every
+move, and the e2e suite passes at the end. The contract tooling still finds
+28 of 28 operations.
 
 ## Skills
 
 | Skill (file link) | Goal, inputs → steps → output | Exact invocation |
 | --- | --- | --- |
-| [`structure-audit`](../../.claude/skills/structure-audit/SKILL.md) | Show which responsibilities are mixed in a marked folder, score what touching it costs, and propose a grouping or record why it stays. In: a root (`src`), the file limit (10) and the stem limit (3). Steps: `scripts/audit.sh` classifies with `check.sh` and lists every folder it does not mark `ok`, `OVER`, `big` and `mixed` alike, with its files grouped by name stem and the lines outside it whose quoted path, resolved against the importing file, lands inside it, then orders the folders safest first. The skill then proposes subfolders by responsibility, or writes down why a folder stays, and lists the outside imports that will change and the docs that draw the layout. Out: `docs/ai-module/evidence/structure-audit-before.txt` (the script output) and `structure-audit-before.md` (proposals and verdicts). Read-only. | `/structure-audit before` |
-| [`structure-check`](../../.claude/skills/structure-check/SKILL.md) | Prove the rule holds and the project still works. In: the same root, the file limit (10) and a stem limit (3). Steps: `scripts/run.sh <label>` runs `scripts/check.sh` (exit 1 if any folder is over the file limit across more than the stem limit; big-but-cohesive and small-but-mixed folders are marked and pass), then `npm run typecheck`, `lint`, `build`, `test:ci` whether or not the rule passed, and combines the two exit codes into one verdict. Out: `docs/ai-module/evidence/structure-check-<label>.txt` with the rule output, each gate command's exit code or skipped status, and the verdict; the script's exit status is the verdict. | `/structure-check after` |
+| [`structure-audit`](../../.claude/skills/structure-audit/SKILL.md) | Show which responsibilities are mixed in a marked folder, score what touching it costs, and propose a grouping or record why it stays. In: a root (`src`), the file limit (10) and the stem limit (3). Steps: `scripts/audit.sh` classifies with `check.sh` and lists every folder it does not mark `ok`, `OVER`, `big` and `mixed` alike, with its files grouped by name stem and the lines outside it whose quoted path, resolved against the importing file, lands inside it, then orders the folders safest first. The skill then proposes subfolders by responsibility, or writes down why a folder stays, and lists the outside imports that will change and the docs that draw the layout. Out: `docs/ai-module/evidence/structure-audit-before.txt` (the script output) and `structure-audit-before.md` (proposals, the proposal as paths, the recorded deviations and the verdicts). Read-only. | `/structure-audit before` |
+| [`structure-check`](../../.claude/skills/structure-check/SKILL.md) | Prove the rule holds and the project still works. In: the same root, the file limit (10) and a stem limit (3). Steps: `scripts/run.sh <label>` runs `scripts/check.sh` (exit 1 if any folder is over the file limit across more than the stem limit; big-but-cohesive and small-but-mixed folders are marked and pass), `scripts/proposal.sh` (the audit report and its proposal block are required; every path in the block exists, or its deviation is recorded as `proposed -> actual: reason` with validated paths and a reason; an unrecorded one fails), then `npm run typecheck`, `lint`, `build`, `test:ci` whether or not the earlier parts passed, and combines the three exit codes into one verdict. Out: `docs/ai-module/evidence/structure-check-<label>.txt` with the rule output, the proposal lines, each gate command's exit code or skipped status, and the verdict; the script's exit status is the verdict. | `/structure-check after` |
 
 **Notes.** Reused, not rebuilt: the project's gate commands from `CLAUDE.md`,
 and `mcp/contract-operations.mjs` to prove the controllers are still found
-after the move. Setup: `chmod +x` on the three scripts, and Docker for the
+after the move. Setup: `chmod +x` on the four scripts, and Docker for the
 final e2e run. The scripts change nothing under `src/`; `run.sh` writes only
 its evidence file. Every move is a `git mv`, so history survives
 (`git log --follow`) and rollback is `git revert` of one commit per folder.
@@ -56,7 +58,10 @@ the architecture's "reconciliation scan" and `delivery` from the README's
 (the module, and `stock-notification.queue.ts` because both pipelines and a
 test import it), the limit itself, and keeping one `credentials/` folder
 where the audit proposed `credentials/` plus `tokens/`. Three two-file
-services did not justify two subfolders.
+services did not justify two subfolders. Each of those departures from the
+proposal is a recorded deviation in the audit report, and the check verifies
+the proposal path by path: 19 paths kept, 18 recorded deviations, none
+unrecorded, none missing.
 
 **Evidence.**
 
@@ -68,13 +73,16 @@ services did not justify two subfolders.
 - `evidence/structure-check-before.txt`: `run.sh` at `b5d0387`, from the
   same worktree. Rule exit 1: `OVER 14 files 6 stems src/auth`,
   `OVER 12 files 4 stems src/notifications`,
-  `OVER 11 files 5 stems src/payments`. Then the gate, exit 0: the old tree
-  compiled and passed before anything moved.
+  `OVER 11 files 5 stems src/payments`. Proposal exit 1: 13 root paths
+  kept, 24 not yet moved and so unrecorded. Then the gate, exit 0: the old
+  tree compiled and passed before anything moved.
 - `evidence/structure-check-after.txt`: rule exit 0, no folder `OVER` and
   every grouped folder at 1 to 3 stems; four small folders are marked
   `mixed` (`authorization` 5, `config` 5, `logging` 4, `storage` 4) and left
-  alone. Then typecheck, lint, build and `test:ci` exit 0, plus the e2e tail
-  from the run at `1fafe8c`; `src/` and `test/` have not changed since.
+  alone. Proposal exit 0: 19 paths kept, 18 recorded deviations, none
+  unrecorded or missing. Then typecheck, lint, build and `test:ci` exit 0,
+  plus the e2e tail from the run at `1fafe8c`; `src/` and `test/` have not
+  changed since.
 - `evidence/baseline-unit.txt`, `evidence/baseline-e2e.txt`: the suites one
   commit before the starting commit, all green. `b5d0387` itself added
   three unit tests and three e2e tests, which is the whole difference
@@ -102,4 +110,6 @@ scores 19 where a string match on the root-relative path saw 5. Sessions A
 and B ran the skills without any current conversation; the check evidence
 was regenerated with the current scripts
 after the rule gained the stem count. Neither proved the proposals are the
-only sensible grouping.
+only sensible grouping. The proposal check verifies paths, not contents: a
+file at its proposed place with the wrong content passes it, and the gate
+is what catches that.

@@ -1,14 +1,14 @@
 ---
 name: structure-check
-description: Executable check that no folder under src is both over a file limit and mixed across more than a few name stems, plus the project gate (typecheck, lint, build, unit tests) so a reorganisation is proven not to break anything. Both always run, their exit codes combine into one verdict, and every command is reported with its exit code or as skipped. Use after moving files, before opening a pull request that touches the layout, or to show a reviewer that a structure rule holds.
+description: Executable check that no folder under src is both over a file limit and mixed across more than a few name stems, that the tree the audit proposed exists or has its deviations recorded, plus the project gate (typecheck, lint, build, unit tests) so a reorganisation is proven not to break anything. All three always run, their exit codes combine into one verdict, and every command is reported with its exit code or as skipped. Use after moving files, before opening a pull request that touches the layout, or to show a reviewer that a structure rule holds.
 ---
 
 # Checking folder structure
 
 Run `.claude/skills/structure-check/scripts/run.sh <label>`, the label being
-letters, digits, `-` and `_`. It does two things,
-always both, and combines their exit codes into one verdict. The gate runs
-whether or not the rule passed: a tree still over the limit is a half-finished
+letters, digits, `-` and `_`. It does three things, always all three, and
+combines their exit codes into one verdict. Each runs whether or not the one
+before it passed: a tree still over the limit is a half-finished
 reorganisation, which is where a broken import is most likely, and `tsc` is
 what finds it.
 
@@ -31,15 +31,28 @@ what finds it.
    them for another root or a stricter rule; a run that fails at the defaults
    is reported at the defaults.
 
-2. **The gate.** `npm run typecheck`, `npm run lint`, `npm run build`,
+2. **The proposal.** `scripts/proposal.sh` reads the audit report,
+   `docs/ai-module/evidence/structure-audit-before.md` unless `AUDIT=` names
+   another, and takes every path in its `proposal` block. The report and the
+   block are required: a missing report, a block that is missing, repeated or
+   unterminated, or a malformed line exits 2, and only a block that is
+   present once and empty means nothing was proposed. A path that exists is kept. A path that does not must have a
+   line in the report's `deviations` block, `proposed -> actual: reason`,
+   whose actual path exists; the check prints it as recorded. A path found
+   elsewhere without such a line is unrecorded and a path found nowhere is
+   missing; either fails. One `credentials/` where the audit proposed
+   `credentials/` and `tokens/` is a recorded deviation, not a green run by
+   accident.
+3. **The gate.** `npm run typecheck`, `npm run lint`, `npm run build`,
    `npm run test:ci`, in that order. A failing command ends the gate and the
    commands after it are reported as skipped, never as passed.
-3. **The verdict.** PASS only when the rule and the gate both exit 0. The
-   script's own exit status is the verdict.
+4. **The verdict.** PASS only when the rule, the proposal and the gate all
+   exit 0. The script's own exit status is the verdict.
 
 The script writes `docs/ai-module/evidence/structure-check-<label>.txt`: the
-rule's output and exit code, one line per gate command with its exit code and
-summary (`Tests: …` for jest) or its skipped status, then the verdict. Report
+rule's output and exit code, the proposal's lines and exit code, one line per
+gate command with its exit code and summary (`Tests: …` for jest) or its
+skipped status, then the verdict. Report
 one table from it, command, exit code or skipped, one-line result, and end
 with the verdict line.
 
@@ -49,6 +62,13 @@ with the verdict line.
   folders marked `OVER`, show the gate beside them, and stop. The two answer
   different questions, and the regrouping is `structure-audit`'s proposal
   and a commit of its own, which this check then proves.
+- A deviation from the proposal is a decision: record it in the report's
+  `deviations` block, one line, `proposed -> actual: reason`. Both sides are
+  repository-relative paths under the same top-level folder, either an exact
+  file or a folder ending in `/`, which maps every file under it, as
+  `src/auth/tokens/ -> src/auth/credentials/: …`; the reason is not empty. A
+  line that breaks that shape exits 2. The check prints a valid record as
+  recorded; an unrecorded deviation fails the run.
 - The rule finds a smell; the grouping stays a judgment call. The stem is a
   proxy for the responsibility: two stems can be one responsibility, as in
   `config`, and one stem can hide two. A `mixed` folder is not a failure:

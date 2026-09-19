@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Runs the structure rule, then the project gate whether or not the rule
-# passed, and exits 0 only when both did.
+# Runs the structure rule, the audit's proposal check and the project gate,
+# each whether or not the one before it passed, and exits 0 only when all did.
 #
 #   ./run.sh                    # print the report
 #   ./run.sh after              # also write docs/ai-module/evidence/structure-check-after.txt
 #   LIMIT=8 STEMS=2 ROOT=test ./run.sh
+#   AUDIT=docs/ai-module/evidence/structure-audit-v2.md ./run.sh
 set -u
 cd "$(git rev-parse --show-toplevel)"
 
@@ -14,6 +15,7 @@ label="${1:-}"
 root="${ROOT:-src}"
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
+audit="${AUDIT:-docs/ai-module/evidence/structure-audit-before.md}"
 require_inputs "$root" "$limit" "$stems_limit" "$label"
 gate=(typecheck lint build test:ci)
 
@@ -36,6 +38,11 @@ say '== rule: %s %s (limit %s files, %s stems) ==\n' "${here#"$PWD"/}/check.sh" 
 LIMIT="$limit" STEMS="$stems_limit" "$here/check.sh" "$root" 2>&1 | tee -a "$report"
 rule="${PIPESTATUS[0]}"
 say 'exit: %d\n\n' "$rule"
+
+say '== proposal: %s ==\n' "$audit"
+"$here/proposal.sh" "$audit" 2>&1 | tee -a "$report"
+proposal="${PIPESTATUS[0]}"
+say 'exit: %d\n\n' "$proposal"
 
 # A failing command ends the gate: a type error would only make the later steps noise.
 say '== gate ==\n'
@@ -68,19 +75,18 @@ done
 say '\n'
 
 say '== verdict ==\n'
-say 'rule  exit: %d\n' "$rule"
-say 'gate  exit: %d%s\n' "$gate_exit" "${failed:+ ($failed)}"
-if [ "$rule" -eq 0 ] && [ "$gate_exit" -eq 0 ]; then
-  say 'PASS  rule and gate both green\n'
+say 'rule      exit: %d\n' "$rule"
+say 'proposal  exit: %d\n' "$proposal"
+say 'gate      exit: %d%s\n' "$gate_exit" "${failed:+ ($failed)}"
+red=""
+[ "$rule" -eq 0 ] || red="$red; rule: folders marked OVER"
+[ "$proposal" -eq 0 ] || red="$red; proposal: unrecorded deviations, missing files, or no usable report"
+[ "$gate_exit" -eq 0 ] || red="$red; gate: $failed failed"
+if [ -z "$red" ]; then
+  say 'PASS  rule, proposal and gate all green\n'
   status=0
-elif [ "$rule" -ne 0 ] && [ "$gate_exit" -ne 0 ]; then
-  say 'FAIL  folders marked OVER, and the gate failed at %s\n' "$failed"
-  status=1
-elif [ "$rule" -ne 0 ]; then
-  say 'FAIL  folders marked OVER; the gate is green, so the tree compiles and its tests pass as it stands\n'
-  status=1
 else
-  say 'FAIL  the gate failed at %s; the structure rule holds\n' "$failed"
+  say 'FAIL  %s\n' "${red#; }"
   status=1
 fi
 

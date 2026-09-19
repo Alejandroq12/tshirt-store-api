@@ -2,9 +2,10 @@
 
 `.claude/skills/structure-audit/scripts/audit.sh` on root `src`, limit 10 files
 and 3 stems; the script output is `structure-audit-before.txt`. The proposals
-are session A's. The mark, stem and crossing columns, the order and the
-verdicts for the `mixed` folders were added when the audit gained those
-measures.
+are session A's. The mark, stem and crossing columns, the order, the verdicts
+for the `mixed` folders and the proposal block were added when the audit
+gained those measures; the deviations block records the decisions the moves
+took against the proposal.
 
 ## Folders the check does not mark ok
 
@@ -88,6 +89,67 @@ src/payments/
     stripe-webhook.controller.ts
     stripe-webhook.service.ts
     stripe-webhook.service.spec.ts
+```
+
+## Proposal, as paths
+
+`structure-check` verifies every line: the path exists, or a deviation below
+says where it went and why.
+
+```proposal
+src/auth/auth.module.ts
+src/auth/index.ts
+src/auth/authenticated-user.ts
+src/auth/auth.controller.ts
+src/auth/auth.controller.spec.ts
+src/auth/auth.dto.ts
+src/auth/auth.service.ts
+src/auth/auth.service.spec.ts
+src/auth/credentials/password.service.ts
+src/auth/credentials/password.service.spec.ts
+src/auth/credentials/secret-token.service.ts
+src/auth/credentials/secret-token.service.spec.ts
+src/auth/tokens/token.service.ts
+src/auth/tokens/token.service.spec.ts
+src/notifications/notifications.module.ts
+src/notifications/stock-notification.queue.ts
+src/notifications/stock-notifications/stock-cycle.service.ts
+src/notifications/stock-notifications/stock-cycle.service.spec.ts
+src/notifications/stock-notifications/stock-notification.producer.ts
+src/notifications/stock-notifications/stock-notification.producer.spec.ts
+src/notifications/stock-notifications/stock-notification.worker.ts
+src/notifications/stock-notifications/stock-notification.worker.spec.ts
+src/notifications/reconciliation/reconciliation.producer.ts
+src/notifications/reconciliation/reconciliation.producer.spec.ts
+src/notifications/reconciliation/reconciliation.worker.ts
+src/notifications/reconciliation/reconciliation.worker.spec.ts
+src/payments/payments.module.ts
+src/payments/stripe.client.ts
+src/payments/payments.controllers.spec.ts
+src/payments/links-and-intents/payment-links.controller.ts
+src/payments/links-and-intents/payment-intents.controller.ts
+src/payments/links-and-intents/payments.dto.ts
+src/payments/links-and-intents/payments.service.ts
+src/payments/links-and-intents/payments.service.spec.ts
+src/payments/webhooks/stripe-webhook.controller.ts
+src/payments/webhooks/stripe-webhook.service.ts
+src/payments/webhooks/stripe-webhook.service.spec.ts
+```
+
+## Deviations
+
+One per line, `proposed -> actual: reason`; a prefix that ends in `/` maps
+every file under that folder.
+
+```deviations
+src/auth/tokens/ -> src/auth/credentials/: three two-file services did not justify two subfolders
+src/notifications/stock-notifications/stock-cycle.service.ts -> src/notifications/stock-cycle/stock-cycle.service.ts: the service decides what to notify, the producer and worker deliver it; two responsibilities
+src/notifications/stock-notifications/stock-cycle.service.spec.ts -> src/notifications/stock-cycle/stock-cycle.service.spec.ts: a spec moves with its subject
+src/notifications/stock-notifications/ -> src/notifications/delivery/: the producer and worker deliver what the cycle decided
+src/payments/links-and-intents/ -> src/payments/methods/: named after the contract's "both Stripe payment methods"
+src/payments/webhooks/ -> src/payments/webhook/: one endpoint and one settlement flow, so singular
+src/payments/stripe.client.ts -> src/payments/stripe/stripe.client.ts: the SDK façade is a responsibility of its own, and the root keeps only the module
+src/payments/payments.controllers.spec.ts -> src/payments/methods/payments.controllers.spec.ts: it exercises all three controllers and sits with the two it belongs to; the root keeps only the module
 ```
 
 ## Folders marked mixed, and why each stays

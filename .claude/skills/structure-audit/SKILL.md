@@ -7,7 +7,8 @@ description: List every folder the structure check does not mark ok, show which 
 
 A folder with many loose files hides which files belong together. This skill
 makes that visible, scores what touching each folder costs, and either
-proposes the grouping or records why the folder stays. It changes nothing.
+proposes the grouping or records why the folder stays. It changes nothing;
+`structure-check` verifies the proposal afterwards, path by path.
 
 ## Steps
 
@@ -46,8 +47,12 @@ proposes the grouping or records why the folder stays. It changes nothing.
 5. Save the script output as `docs/ai-module/evidence/structure-audit-<label>.txt`
    and write `docs/ai-module/evidence/structure-audit-<label>.md` with: the
    table of folders printed, with mark, files, stems and crossings; the
-   proposed tree per folder, or the verdict that it stays and why; the lines
-   from step 3; the doc lines from step 4. Nothing else.
+   proposed tree per folder, or the verdict that it stays and why; a
+   `proposal` fenced block with every proposed path, one per line, which
+   `structure-check` verifies afterwards; an empty `deviations` fenced block,
+   filled during the moves with `proposed -> actual: reason` for each decision
+   that departs from the proposal; the lines from step 3; the doc lines from
+   step 4. Nothing else.
 
 ## Rules
 
