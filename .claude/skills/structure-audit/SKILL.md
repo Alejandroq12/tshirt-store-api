@@ -19,9 +19,9 @@ proposes the grouping or records why the folder stays. It changes nothing;
    `mixed` alike, so a folder the check reports cannot fall out of the audit.
    For each it prints the files grouped by name stem and the number of lines
    outside the folder whose quoted path, resolved against the file that holds
-   it, lands in the folder or names it: `from`, side-effect and dynamic
-   imports, re-exports and `jest.mock` paths alike, and a parent's `./sub/x`
-   for a nested folder.
+   it, lands in the folder or names it, each line counted once: `from`,
+   side-effect and dynamic imports, re-exports and `jest.mock` paths alike,
+   and a parent's `./sub/x` for a nested folder.
    The stem is the part before the first dot, because in this codebase the
    stem is the responsibility: `stripe-webhook.controller.ts` and
    `stripe-webhook.service.ts` belong together. It ends with the folders

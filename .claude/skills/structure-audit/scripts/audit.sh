@@ -12,7 +12,7 @@ cd "$(git rev-parse --show-toplevel)"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 check="$here/../../structure-check/scripts/check.sh"
 . "$here/../../structure-check/scripts/inputs.sh"
-root="${1:-src}"
+root=$(normalize_root "${1:-src}") || exit 2
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
 require_inputs "$root" "$limit" "$stems_limit"
@@ -43,6 +43,7 @@ crossings() {
       if (index(file, dir "/") == 1) next
       res = resolve(base, path)
       if (res != dir && index(res, dir "/") != 1) next
+      key = file ":" substr(rest, 1, j - 1); if (key in seen) next; seen[key] = 1
       n++
       if (show) print "    " $0
     }

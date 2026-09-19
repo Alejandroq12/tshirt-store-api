@@ -10,7 +10,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/inputs.sh"
-root="${1:-src}"
+root=$(normalize_root "${1:-src}") || exit 2
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
 require_inputs "$root" "$limit" "$stems_limit"

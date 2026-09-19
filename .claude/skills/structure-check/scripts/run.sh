@@ -12,7 +12,7 @@ cd "$(git rev-parse --show-toplevel)"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/inputs.sh"
 label="${1:-}"
-root="${ROOT:-src}"
+root=$(normalize_root "${ROOT:-src}") || exit 2
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
 audit="${AUDIT:-docs/ai-module/evidence/structure-audit-before.md}"
