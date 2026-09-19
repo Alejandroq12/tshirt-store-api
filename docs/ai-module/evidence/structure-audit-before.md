@@ -1,14 +1,26 @@
 # Structure audit — before
 
-`.claude/skills/structure-audit/scripts/audit.sh` on root `src`, limit 10.
+`.claude/skills/structure-audit/scripts/audit.sh` on root `src`, limit 10 files
+and 3 stems; the script output is `structure-audit-before.txt`. The proposals
+are session A's. The mark, stem and crossing columns, the order and the
+verdicts for the `mixed` folders were added when the audit gained those
+measures.
 
-## Folders over the limit
+## Folders the check does not mark ok
 
-| Folder               | Files | Limit | Responsibilities mixed inside                                     |
-| -------------------- | ----- | ----- | ----------------------------------------------------------------- |
-| `src/auth`           | 14    | 10    | the 7 `Authentication` operations, password hashing, opaque reset secrets, JWT issuing |
-| `src/notifications`  | 12    | 10    | stock notification cycle, BullMQ stock producer/worker, Stripe reconciliation producer/worker |
-| `src/payments`       | 11    | 10    | Payment Link and Payment Intent creation, the Stripe client, signed webhook processing |
+| Folder | Mark | Files | Stems | Crossings | Responsibilities mixed inside |
+| --- | --- | --- | --- | --- | --- |
+| `src/payments` | OVER | 11 | 5 | 6 | Payment Link and Payment Intent creation, the Stripe client, signed webhook processing |
+| `src/logging` | mixed | 7 | 4 | 6 | pino module, redaction paths, request logging, secret scrubber |
+| `src/storage` | mixed | 6 | 4 | 9 | S3 primitive, upload limits, barrel |
+| `src/notifications` | OVER | 12 | 4 | 22 | stock notification cycle, BullMQ stock producer/worker, Stripe reconciliation producer/worker |
+| `src/authorization` | mixed | 6 | 5 | 34 | CASL types, factory, registry spec, module, barrel |
+| `src/config` | mixed | 8 | 5 | 34 | env schema, seed env schema, published placeholders, module, barrel |
+| `src/auth` | OVER | 14 | 6 | 50 | the 7 `Authentication` operations, password hashing, opaque reset secrets, JWT issuing |
+
+Safest first, fewest crossings: `payments`, then `notifications`, then `auth`
+among the `OVER` folders, and the commits took that order. The `mixed` folders
+stay; the verdicts are below the proposals.
 
 ## Proposed tree
 
@@ -78,10 +90,24 @@ src/payments/
     stripe-webhook.service.spec.ts
 ```
 
+## Folders marked mixed, and why each stays
+
+| Folder | Files | Stems | Crossings | Verdict |
+| --- | --- | --- | --- | --- |
+| `src/authorization` | 6 | 5 | 34 | Stays. One concern, the CASL mechanism `CLAUDE.md` describes: the ability types, the factory and its spec, the spec of what every feature registers, the module and the barrel. Five stems would become five folders of one file, and 34 crossing lines would change for it. |
+| `src/config` | 8 | 5 | 34 | Stays. One concern, the environment schema that fails the boot: three validators (`env`, `seed-env`, `published-placeholders`) with their specs, the module and the barrel. |
+| `src/logging` | 7 | 4 | 6 | Stays. One concern, logging: `redaction`, `request-logging` and `secret-scrubber` are each a file and its spec beside the module. Grouping the pairs gives folders of two files. |
+| `src/storage` | 6 | 4 | 9 | Stays. One concern, the S3 primitive and the upload limits it enforces, which `images/` imports directly. |
+
+The check reports a `mixed` folder on every run and the audit lists it; the
+verdict is revisited when the folder crosses the file limit, which the check
+then reports as `OVER`.
+
 ## Imports outside the folder that will change
 
-`grep -rn "from '.*/<folder>/" src test --include='*.ts'`. Only the lines that
-name a file that moves are listed; every folder's own `./` imports change too.
+`SHOW=1 .claude/skills/structure-audit/scripts/audit.sh` prints the lines
+behind each score. Only the lines that name a file that moves are listed;
+every folder's own `./` imports change too.
 
 ### `src/auth`
 

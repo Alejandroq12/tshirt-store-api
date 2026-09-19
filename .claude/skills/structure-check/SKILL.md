@@ -1,6 +1,6 @@
 ---
 name: structure-check
-description: Executable check that no folder under src holds more than a fixed number of loose files, plus the project gate (typecheck, lint, build, unit tests) so a reorganisation is proven not to break anything. Both always run, their exit codes combine into one verdict, and every command is reported with its exit code or as skipped. Use after moving files, before opening a pull request that touches the layout, or to show a reviewer that a structure rule holds.
+description: Executable check that no folder under src is both over a file limit and mixed across more than a few name stems, plus the project gate (typecheck, lint, build, unit tests) so a reorganisation is proven not to break anything. Both always run, their exit codes combine into one verdict, and every command is reported with its exit code or as skipped. Use after moving files, before opening a pull request that touches the layout, or to show a reviewer that a structure rule holds.
 ---
 
 # Checking folder structure
@@ -11,10 +11,24 @@ whether or not the rule passed: a tree still over the limit is a half-finished
 reorganisation, which is where a broken import is most likely, and `tsc` is
 what finds it.
 
-1. **The rule.** `scripts/check.sh` lists every folder under `src/` with its
-   direct file count and exits 1 if any exceeds the limit. The limit is printed
-   in the output; it is never lowered to make a run pass.
-   `LIMIT=8 ROOT=test … run.sh` changes either.
+1. **The rule.** `scripts/check.sh` lists every folder under `src/` with two
+   numbers: its direct file count and its stem count. The stem is the file
+   name up to the first dot, and in this codebase the stem is the
+   responsibility: `stripe-webhook.controller.ts` and
+   `stripe-webhook.service.ts` are one. The file count is the trigger, the
+   stem count is the proof.
+   - `OVER`: over the file limit across more than the stem limit. Big and
+     mixed; the run fails.
+   - `big`: over the file limit with few stems. Fourteen files across two
+     stems is cohesive; passes.
+   - `mixed`: under the file limit with many stems. Passes, but reported,
+     because it is a smell.
+
+   Defaults are 10 files and 3 stems, printed in the output. Three is where
+   this codebase's grouped folders landed: the feature's own stem, its barrel
+   and one shared file. `LIMIT=8 STEMS=2 ROOT=test … run.sh` changes any of
+   them, and none is moved to make a run pass.
+
 2. **The gate.** `npm run typecheck`, `npm run lint`, `npm run build`,
    `npm run test:ci`, in that order. A failing command ends the gate and the
    commands after it are reported as skipped, never as passed.
@@ -30,7 +44,13 @@ with the verdict line.
 ## Rules
 
 - Never edit a file to make the check pass; report the failure.
-- A rule exit of 1 is a valid result. Report which folders are over, and the
+- The rule finds a smell; the grouping stays a judgment call. The stem is a
+  proxy for the responsibility: two stems can be one responsibility, as in
+  `config`, and one stem can hide two. A `mixed` folder is not a failure:
+  `structure-audit` lists every folder this check does not mark `ok` and
+  records a verdict for each, and the file limit is what turns a growing junk
+  drawer into `OVER`.
+- A rule exit of 1 is a valid result. Report which folders are `OVER`, and the
   gate beside it: the two answer different questions.
 - Do not run the e2e suite from this skill; it needs Docker and takes minutes.
   Say so, and let the caller run `npm run test:e2e` once at the end and append
