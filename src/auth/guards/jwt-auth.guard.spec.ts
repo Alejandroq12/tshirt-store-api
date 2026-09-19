@@ -5,7 +5,7 @@ import type { Request } from 'express';
 import type { AuthService } from '../auth.service';
 import { IS_OPTIONAL_AUTH } from '../decorators/optional-auth.decorator';
 import { IS_PUBLIC } from '../decorators/public.decorator';
-import type { TokenService } from '../token.service';
+import type { TokenService } from '../credentials/token.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 const CLAIMS = {

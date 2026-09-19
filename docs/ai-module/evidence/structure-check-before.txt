@@ -1,0 +1,84 @@
+structure-check — label: before — 2026-09-19 03:01 CST
+branch: HEAD @ b5d0387
+
+== rule: .claude/skills/structure-check/scripts/check.sh src (limit 10 files, 3 stems) ==
+ok      3 files  3 stems  src
+OVER   14 files  6 stems  src/auth
+ok      4 files  3 stems  src/auth/decorators
+ok      2 files  1 stems  src/auth/guards
+mixed   6 files  5 stems  src/authorization
+ok      1 files  1 stems  src/authorization/decorators
+ok      2 files  1 stems  src/authorization/guards
+ok      6 files  1 stems  src/cart
+ok      0 files  0 stems  src/common
+ok      2 files  1 stems  src/common/filters
+ok      7 files  3 stems  src/common/problems
+ok      1 files  1 stems  src/common/validation
+mixed   8 files  5 stems  src/config
+ok      7 files  1 stems  src/images
+mixed   7 files  4 stems  src/logging
+ok      4 files  2 stems  src/mail
+OVER   12 files  4 stems  src/notifications
+ok      8 files  2 stems  src/orders
+OVER   11 files  5 stems  src/payments
+ok      3 files  2 stems  src/prisma
+ok      6 files  1 stems  src/products
+ok      4 files  3 stems  src/security
+ok      6 files  1 stems  src/skus
+mixed   6 files  4 stems  src/storage
+structure: folders marked OVER must be grouped by responsibility (limit 10 files, 3 stems)
+exit: 1
+
+== proposal: docs/ai-module/evidence/structure-audit-before.md ==
+kept        src/auth/auth.module.ts
+kept        src/auth/index.ts
+kept        src/auth/authenticated-user.ts
+kept        src/auth/auth.controller.ts
+kept        src/auth/auth.controller.spec.ts
+kept        src/auth/auth.dto.ts
+kept        src/auth/auth.service.ts
+kept        src/auth/auth.service.spec.ts
+UNRECORDED  src/auth/credentials/password.service.ts is at src/auth/password.service.ts
+UNRECORDED  src/auth/credentials/password.service.spec.ts is at src/auth/password.service.spec.ts
+UNRECORDED  src/auth/credentials/secret-token.service.ts is at src/auth/secret-token.service.ts
+UNRECORDED  src/auth/credentials/secret-token.service.spec.ts is at src/auth/secret-token.service.spec.ts
+UNRECORDED  src/auth/tokens/token.service.ts is at src/auth/token.service.ts
+UNRECORDED  src/auth/tokens/token.service.spec.ts is at src/auth/token.service.spec.ts
+kept        src/notifications/notifications.module.ts
+kept        src/notifications/stock-notification.queue.ts
+UNRECORDED  src/notifications/stock-notifications/stock-cycle.service.ts is at src/notifications/stock-cycle.service.ts
+UNRECORDED  src/notifications/stock-notifications/stock-cycle.service.spec.ts is at src/notifications/stock-cycle.service.spec.ts
+UNRECORDED  src/notifications/stock-notifications/stock-notification.producer.ts is at src/notifications/stock-notification.producer.ts
+UNRECORDED  src/notifications/stock-notifications/stock-notification.producer.spec.ts is at src/notifications/stock-notification.producer.spec.ts
+UNRECORDED  src/notifications/stock-notifications/stock-notification.worker.ts is at src/notifications/stock-notification.worker.ts
+UNRECORDED  src/notifications/stock-notifications/stock-notification.worker.spec.ts is at src/notifications/stock-notification.worker.spec.ts
+UNRECORDED  src/notifications/reconciliation/reconciliation.producer.ts is at src/notifications/reconciliation.producer.ts
+UNRECORDED  src/notifications/reconciliation/reconciliation.producer.spec.ts is at src/notifications/reconciliation.producer.spec.ts
+UNRECORDED  src/notifications/reconciliation/reconciliation.worker.ts is at src/notifications/reconciliation.worker.ts
+UNRECORDED  src/notifications/reconciliation/reconciliation.worker.spec.ts is at src/notifications/reconciliation.worker.spec.ts
+kept        src/payments/payments.module.ts
+kept        src/payments/stripe.client.ts
+kept        src/payments/payments.controllers.spec.ts
+UNRECORDED  src/payments/links-and-intents/payment-links.controller.ts is at src/payments/payment-links.controller.ts
+UNRECORDED  src/payments/links-and-intents/payment-intents.controller.ts is at src/payments/payment-intents.controller.ts
+UNRECORDED  src/payments/links-and-intents/payments.dto.ts is at src/payments/payments.dto.ts
+UNRECORDED  src/payments/links-and-intents/payments.service.ts is at src/payments/payments.service.ts
+UNRECORDED  src/payments/links-and-intents/payments.service.spec.ts is at src/payments/payments.service.spec.ts
+UNRECORDED  src/payments/webhooks/stripe-webhook.controller.ts is at src/payments/stripe-webhook.controller.ts
+UNRECORDED  src/payments/webhooks/stripe-webhook.service.ts is at src/payments/stripe-webhook.service.ts
+UNRECORDED  src/payments/webhooks/stripe-webhook.service.spec.ts is at src/payments/stripe-webhook.service.spec.ts
+proposal: 13 kept, 0 recorded deviations, 24 unrecorded, 0 missing
+exit: 1
+
+== gate ==
+npm run typecheck  exit: 0   clean
+npm run lint       exit: 0   clean
+npm run build      exit: 0   clean
+npm run test:ci    exit: 0   Test Suites: 43 passed, 43 total
+                             Tests:       506 passed, 506 total
+
+== verdict ==
+rule      exit: 1
+proposal  exit: 1
+gate      exit: 0
+FAIL  rule: folders marked OVER; proposal: unrecorded deviations, missing files, or no usable report
