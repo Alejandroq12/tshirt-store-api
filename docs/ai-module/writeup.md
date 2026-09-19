@@ -18,14 +18,15 @@ move, and the e2e suite passes at the end. The contract tooling still finds
 | Skill (file link) | Goal, inputs → steps → output | Exact invocation |
 | --- | --- | --- |
 | [`structure-audit`](../../.claude/skills/structure-audit/SKILL.md) | Show which responsibilities are mixed in a crowded folder and propose a grouping. In: a root (`src`) and a limit (10). Steps: `scripts/audit.sh` lists every folder over the limit with its files grouped by name. The skill then proposes subfolders by responsibility, lists the outside imports that will change and the docs that draw the layout. Out: `docs/ai-module/evidence/structure-audit-before.md`. Read-only. | `/structure-audit before` |
-| [`structure-check`](../../.claude/skills/structure-check/SKILL.md) | Prove the rule holds and the project still works. In: the same root and limit. Steps: `scripts/check.sh` exits 1 if any folder is over the limit. Then `npm run typecheck`, `lint`, `build`, `test:ci`, stopping at the first failure. Out: `docs/ai-module/evidence/structure-check-<label>.txt` with every exit code. | `/structure-check after` |
+| [`structure-check`](../../.claude/skills/structure-check/SKILL.md) | Prove the rule holds and the project still works. In: the same root and limit. Steps: `scripts/run.sh <label>` runs `scripts/check.sh` (exit 1 if any folder is over the limit), then `npm run typecheck`, `lint`, `build`, `test:ci` whether or not the rule passed, and combines the two exit codes into one verdict. Out: `docs/ai-module/evidence/structure-check-<label>.txt` with the rule output, each gate command's exit code or skipped status, and the verdict; the script's exit status is the verdict. | `/structure-check after` |
 
 **Notes.** Reused, not rebuilt: the project's gate commands from `CLAUDE.md`,
 and `mcp/contract-operations.mjs` to prove the controllers are still found
-after the move. Setup: `chmod +x` on the two scripts, and Docker for the
-final e2e run. Both scripts are read-only. Every move is a `git mv`, so
-history survives (`git log --follow`) and rollback is `git revert` of one
-commit per folder. No migration, no contract change, no runtime change.
+after the move. Setup: `chmod +x` on the three scripts, and Docker for the
+final e2e run. The scripts change nothing under `src/`; `run.sh` writes only
+its evidence file. Every move is a `git mv`, so history survives
+(`git log --follow`) and rollback is `git revert` of one commit per folder.
+No migration, no contract change, no runtime change.
 
 ## Project Results
 
@@ -46,7 +47,9 @@ services did not justify two subfolders.
 **Evidence.**
 
 - `evidence/structure-check-before.txt`: rule exit 1. `OVER 14 src/auth`,
-  `OVER 12 src/notifications`, `OVER 11 src/payments`.
+  `OVER 12 src/notifications`, `OVER 11 src/payments`. Captured with the
+  first version of the skill, which stopped after the rule; `run.sh` now runs
+  the gate regardless of the rule's result.
 - `evidence/structure-audit-before.md`: the report and proposal from a fresh
   session (session A).
 - `evidence/structure-check-after.txt`: rule exit 0, then typecheck, lint,
