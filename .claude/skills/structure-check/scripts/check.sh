@@ -8,14 +8,15 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$here/inputs.sh"
 root="${1:-src}"
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
-case "$root" in -*|/*|*..*) echo "root must be a relative directory inside the repository: $root" >&2; exit 2;; esac
-[ -d "$root" ] || { echo "root is not a directory: $root" >&2; exit 2; }
+require_inputs "$root" "$limit" "$stems_limit"
 status=0
 
-for dir in $(find "$root" -type d | sort); do
+while IFS= read -r -d '' dir; do
   files=$(find "$dir" -maxdepth 1 -type f | wc -l | tr -d ' ')
   stems=$(find "$dir" -maxdepth 1 -type f -exec basename {} \; | sed 's/\..*//' | sort -u | wc -l | tr -d ' ')
   if [ "$files" -gt "$limit" ] && [ "$stems" -gt "$stems_limit" ]; then
@@ -29,7 +30,7 @@ for dir in $(find "$root" -type d | sort); do
     mark=ok
   fi
   printf '%-5s %3d files %2d stems  %s\n' "$mark" "$files" "$stems" "$dir"
-done
+done < <(find "$root" -type d -print0 | sort -z)
 
 if [ "$status" -eq 0 ]; then
   echo "structure: no folder under $root holds more than $limit files across more than $stems_limit stems"

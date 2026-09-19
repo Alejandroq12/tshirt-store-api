@@ -31,7 +31,9 @@ Between `b5d0387`, where `dev` stands, and this branch, `src/` changes are 26
 renames and import paths in 13 files, every changed line an `import` or
 `export … from` (`git diff -M b5d0387 HEAD -- src prisma api`): no migration,
 no contract change, no runtime change. A diff without rename detection shows
-the moved payment files as new.
+the moved payment files as new, but the payment endpoints, their DTO
+validation and the stock-cycle wiring in them exist at `b5d0387`; the moves
+changed their paths, not their behaviour.
 
 ## Project Results
 

@@ -11,11 +11,11 @@ cd "$(git rev-parse --show-toplevel)"
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 check="$here/../../structure-check/scripts/check.sh"
+. "$here/../../structure-check/scripts/inputs.sh"
 root="${1:-src}"
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
-case "$root" in -*|/*|*..*) echo "root must be a relative directory inside the repository: $root" >&2; exit 2;; esac
-[ -d "$root" ] || { echo "root is not a directory: $root" >&2; exit 2; }
+require_inputs "$root" "$limit" "$stems_limit"
 order=""
 
 refs=$(grep -rnoE "['\"](\.\.?/[^'\"]*|src/[^'\"]*)['\"]" src test --include='*.ts' || true)
@@ -53,7 +53,8 @@ note=""
 if [ -n "$(git status --porcelain)" ]; then note=" (uncommitted changes)"; fi
 printf 'structure-audit — %s @ %s%s — %s\n' "$(git rev-parse --abbrev-ref HEAD)" "$(git rev-parse --short HEAD)" "$note" "$(date '+%Y-%m-%d %H:%M %Z')"
 
-marked=$(LIMIT="$limit" STEMS="$stems_limit" "$check" "$root" | awk '$3 == "files" && $5 == "stems" && $1 != "ok" { print $1, $2, $4, $6 }' || true)
+report=$(LIMIT="$limit" STEMS="$stems_limit" "$check" "$root") || [ $? -eq 1 ] || exit 2
+marked=$(printf '%s\n' "$report" | awk '$3 == "files" && $5 == "stems" && $1 != "ok" { print $1, $2, $4, substr($0, index($0, " stems  ") + 8) }')
 
 while read -r mark files stems dir; do
   [ -n "$dir" ] || continue
