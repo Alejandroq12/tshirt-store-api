@@ -15,12 +15,12 @@ export {
 } from './decorators/optional-auth.decorator';
 export { IS_PUBLIC, Public } from './decorators/public.decorator';
 export { JwtAuthGuard } from './guards/jwt-auth.guard';
-export { PasswordService } from './password.service';
-export { SecretTokenService } from './secret-token.service';
+export { PasswordService } from './credentials/password.service';
+export { SecretTokenService } from './credentials/secret-token.service';
 export {
   type AccessTokenClaims,
   type IssuedToken,
   type RefreshTokenClaims,
   type SessionSubject,
   TokenService,
-} from './token.service';
+} from './credentials/token.service';

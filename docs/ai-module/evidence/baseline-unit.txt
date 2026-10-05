@@ -1,0 +1,40 @@
+  reconciliation.worker.ts             |     100 |       80 |     100 |     100 | 29-31                                           
+  stock-cycle.service.ts               |     100 |      100 |     100 |     100 |                                                 
+  stock-notification.producer.ts       |     100 |      100 |     100 |     100 |                                                 
+  stock-notification.queue.ts          |     100 |      100 |     100 |     100 |                                                 
+  stock-notification.worker.ts         |   96.42 |     87.5 |      80 |   95.83 | 17                                              
+ orders                                |    98.9 |    87.83 |      95 |    98.8 |                                                 
+  my-orders.controller.ts              |     100 |       75 |     100 |     100 | 11-18                                           
+  orders.controller.ts                 |     100 |       75 |     100 |     100 | 30-63                                           
+  orders.dto.ts                        |   93.33 |      100 |      50 |   93.33 | 38,43                                           
+  orders.service.ts                    |     100 |    93.75 |     100 |     100 | 137-139,455-461                                 
+ payments                              |   92.51 |    79.19 |   88.88 |   92.76 |                                                 
+  payment-intents.controller.ts        |     100 |       75 |     100 |     100 | 10-16                                           
+  payment-links.controller.ts          |     100 |       75 |     100 |     100 | 11-18                                           
+  payments.dto.ts                      |     100 |      100 |     100 |     100 |                                                 
+  payments.service.ts                  |     100 |    91.89 |     100 |     100 | 99-100                                          
+  stripe-webhook.controller.ts         |     100 |       75 |     100 |     100 | 17-25                                           
+  stripe-webhook.service.ts            |   90.38 |       76 |   96.29 |   91.36 | 142,148,192,207,215,222,247,273,307,350,376,379 
+  stripe.client.ts                     |      60 |       75 |       0 |      50 | 12-38                                           
+ prisma                                |   66.66 |       75 |       0 |   57.14 |                                                 
+  prisma.service.ts                    |   66.66 |       75 |       0 |   57.14 | 13-21                                           
+ products                              |    98.6 |    88.65 |   94.44 |   98.44 |                                                 
+  products.controller.ts               |     100 |    77.58 |     100 |     100 | 36-72,90-93                                     
+  products.dto.ts                      |    92.3 |      100 |   33.33 |    92.3 | 23,28                                           
+  products.service.ts                  |     100 |    96.29 |     100 |     100 | 164,416                                         
+ security                              |     100 |      100 |     100 |     100 |                                                 
+  password-reset-throttle.decorator.ts |     100 |      100 |     100 |     100 |                                                 
+ skus                                  |     100 |    82.66 |     100 |     100 |                                                 
+  skus.controller.ts                   |     100 |    79.48 |     100 |     100 | 15-42                                           
+  skus.dto.ts                          |     100 |      100 |     100 |     100 |                                                 
+  skus.service.ts                      |     100 |    86.11 |     100 |     100 | 104-106,150                                     
+ storage                               |   96.29 |       90 |   85.71 |   95.83 |                                                 
+  image-upload.constants.ts            |     100 |      100 |     100 |     100 |                                                 
+  s3-storage.service.ts                |   95.45 |       90 |   83.33 |      95 | 67                                              
+---------------------------------------|---------|----------|---------|---------|-------------------------------------------------
+
+Test Suites: 43 passed, 43 total
+Tests:       503 passed, 503 total
+Snapshots:   0 total
+Time:        3.063 s
+Ran all test suites.

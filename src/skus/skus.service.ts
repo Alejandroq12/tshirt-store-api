@@ -4,8 +4,8 @@ import { Prisma, type ProductSku, UserRole } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import type { EnvironmentVariables } from '../config/env.validation';
-import { StockCycleService } from '../notifications/stock-cycle.service';
-import { StockNotificationProducer } from '../notifications/stock-notification.producer';
+import { StockCycleService } from '../notifications/stock-cycle/stock-cycle.service';
+import { StockNotificationProducer } from '../notifications/delivery/stock-notification.producer';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkuRequest, UpdateSkuRequest } from './skus.dto';
 

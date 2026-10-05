@@ -4,7 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/bootstrap';
 import { MailService } from '../../src/mail/mail.service';
-import { StripeClient } from '../../src/payments/stripe.client';
+import { StripeClient } from '../../src/payments/stripe/stripe.client';
 import { S3StorageService } from '../../src/storage/s3-storage.service';
 import { ValidationProbeModule } from './validation-probe.module';
 

@@ -20,8 +20,8 @@ import {
   ValidationProblemException,
 } from '../common/problems';
 import type { EnvironmentVariables } from '../config/env.validation';
-import { StockCycleService } from '../notifications/stock-cycle.service';
-import { StockNotificationProducer } from '../notifications/stock-notification.producer';
+import { StockCycleService } from '../notifications/stock-cycle/stock-cycle.service';
+import { StockNotificationProducer } from '../notifications/delivery/stock-notification.producer';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ListMyOrdersQuery,

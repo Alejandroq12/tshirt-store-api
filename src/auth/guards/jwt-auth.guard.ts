@@ -10,7 +10,7 @@ import type { Request } from 'express';
 import { IS_OPTIONAL_AUTH } from '../decorators/optional-auth.decorator';
 import { IS_PUBLIC } from '../decorators/public.decorator';
 import { AuthService } from '../auth.service';
-import { TokenService } from '../token.service';
+import { TokenService } from '../credentials/token.service';
 
 const bearerToken = (request: Request): string | undefined => {
   const header = request.headers.authorization;

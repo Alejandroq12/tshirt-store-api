@@ -4,7 +4,7 @@ import { sign } from 'jsonwebtoken';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import { TokenService } from '../src/auth/token.service';
+import { TokenService } from '../src/auth/credentials/token.service';
 import type { EnvironmentVariables } from '../src/config/env.validation';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';

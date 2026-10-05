@@ -1,0 +1,102 @@
+structure-check — label: after — 2026-09-19 02:40 CST
+branch: feat/agentic-workflow @ 9b08c1c (uncommitted changes)
+
+== rule: .claude/skills/structure-check/scripts/check.sh src (limit 10 files, 3 stems) ==
+ok      3 files  3 stems  src
+ok      8 files  3 stems  src/auth
+ok      6 files  3 stems  src/auth/credentials
+ok      4 files  3 stems  src/auth/decorators
+ok      2 files  1 stems  src/auth/guards
+mixed   6 files  5 stems  src/authorization
+ok      1 files  1 stems  src/authorization/decorators
+ok      2 files  1 stems  src/authorization/guards
+ok      6 files  1 stems  src/cart
+ok      0 files  0 stems  src/common
+ok      2 files  1 stems  src/common/filters
+ok      7 files  3 stems  src/common/problems
+ok      1 files  1 stems  src/common/validation
+mixed   8 files  5 stems  src/config
+ok      7 files  1 stems  src/images
+mixed   7 files  4 stems  src/logging
+ok      4 files  2 stems  src/mail
+ok      2 files  2 stems  src/notifications
+ok      4 files  1 stems  src/notifications/delivery
+ok      4 files  1 stems  src/notifications/reconciliation
+ok      2 files  1 stems  src/notifications/stock-cycle
+ok      8 files  2 stems  src/orders
+ok      1 files  1 stems  src/payments
+ok      6 files  3 stems  src/payments/methods
+ok      1 files  1 stems  src/payments/stripe
+ok      3 files  1 stems  src/payments/webhook
+ok      3 files  2 stems  src/prisma
+ok      6 files  1 stems  src/products
+ok      4 files  3 stems  src/security
+ok      6 files  1 stems  src/skus
+mixed   6 files  4 stems  src/storage
+structure: no folder under src holds more than 10 files across more than 3 stems
+exit: 0
+
+== proposal: docs/ai-module/evidence/structure-audit-before.md ==
+kept        src/auth/auth.module.ts
+kept        src/auth/index.ts
+kept        src/auth/authenticated-user.ts
+kept        src/auth/auth.controller.ts
+kept        src/auth/auth.controller.spec.ts
+kept        src/auth/auth.dto.ts
+kept        src/auth/auth.service.ts
+kept        src/auth/auth.service.spec.ts
+kept        src/auth/credentials/password.service.ts
+kept        src/auth/credentials/password.service.spec.ts
+kept        src/auth/credentials/secret-token.service.ts
+kept        src/auth/credentials/secret-token.service.spec.ts
+recorded    src/auth/tokens/token.service.ts -> src/auth/credentials/token.service.ts: three two-file services did not justify two subfolders
+recorded    src/auth/tokens/token.service.spec.ts -> src/auth/credentials/token.service.spec.ts: three two-file services did not justify two subfolders
+kept        src/notifications/notifications.module.ts
+kept        src/notifications/stock-notification.queue.ts
+recorded    src/notifications/stock-notifications/stock-cycle.service.ts -> src/notifications/stock-cycle/stock-cycle.service.ts: the service decides what to notify, the producer and worker deliver it; two responsibilities
+recorded    src/notifications/stock-notifications/stock-cycle.service.spec.ts -> src/notifications/stock-cycle/stock-cycle.service.spec.ts: a spec moves with its subject
+recorded    src/notifications/stock-notifications/stock-notification.producer.ts -> src/notifications/delivery/stock-notification.producer.ts: the producer and worker deliver what the cycle decided
+recorded    src/notifications/stock-notifications/stock-notification.producer.spec.ts -> src/notifications/delivery/stock-notification.producer.spec.ts: the producer and worker deliver what the cycle decided
+recorded    src/notifications/stock-notifications/stock-notification.worker.ts -> src/notifications/delivery/stock-notification.worker.ts: the producer and worker deliver what the cycle decided
+recorded    src/notifications/stock-notifications/stock-notification.worker.spec.ts -> src/notifications/delivery/stock-notification.worker.spec.ts: the producer and worker deliver what the cycle decided
+kept        src/notifications/reconciliation/reconciliation.producer.ts
+kept        src/notifications/reconciliation/reconciliation.producer.spec.ts
+kept        src/notifications/reconciliation/reconciliation.worker.ts
+kept        src/notifications/reconciliation/reconciliation.worker.spec.ts
+kept        src/payments/payments.module.ts
+recorded    src/payments/stripe.client.ts -> src/payments/stripe/stripe.client.ts: the SDK façade is a responsibility of its own, and the root keeps only the module
+recorded    src/payments/payments.controllers.spec.ts -> src/payments/methods/payments.controllers.spec.ts: it exercises all three controllers and sits with the two it belongs to; the root keeps only the module
+recorded    src/payments/links-and-intents/payment-links.controller.ts -> src/payments/methods/payment-links.controller.ts: named after the contract's "both Stripe payment methods"
+recorded    src/payments/links-and-intents/payment-intents.controller.ts -> src/payments/methods/payment-intents.controller.ts: named after the contract's "both Stripe payment methods"
+recorded    src/payments/links-and-intents/payments.dto.ts -> src/payments/methods/payments.dto.ts: named after the contract's "both Stripe payment methods"
+recorded    src/payments/links-and-intents/payments.service.ts -> src/payments/methods/payments.service.ts: named after the contract's "both Stripe payment methods"
+recorded    src/payments/links-and-intents/payments.service.spec.ts -> src/payments/methods/payments.service.spec.ts: named after the contract's "both Stripe payment methods"
+recorded    src/payments/webhooks/stripe-webhook.controller.ts -> src/payments/webhook/stripe-webhook.controller.ts: one endpoint and one settlement flow, so singular
+recorded    src/payments/webhooks/stripe-webhook.service.ts -> src/payments/webhook/stripe-webhook.service.ts: one endpoint and one settlement flow, so singular
+recorded    src/payments/webhooks/stripe-webhook.service.spec.ts -> src/payments/webhook/stripe-webhook.service.spec.ts: one endpoint and one settlement flow, so singular
+proposal: 19 kept, 18 recorded deviations, 0 unrecorded, 0 missing
+exit: 0
+
+== gate ==
+npm run typecheck  exit: 0   clean
+npm run lint       exit: 0   clean
+npm run build      exit: 0   clean
+npm run test:ci    exit: 0   Test Suites: 43 passed, 43 total
+                             Tests:       506 passed, 506 total
+
+== verdict ==
+rule      exit: 0
+proposal  exit: 0
+gate      exit: 0
+PASS  rule, proposal and gate all green
+
+== e2e: npm run test:e2e at 1fafe8c on 2026-09-10, run in a plain terminal (not under this skill) ==
+Docker was not running on 2026-09-19, so the suite was not re-run; src/ and test/ are unchanged since 1fafe8c.
+PASS test/http-contract.e2e-spec.ts
+PASS test/bootstrap.e2e-spec.ts
+
+Test Suites: 11 passed, 11 total
+Tests:       96 passed, 96 total
+Snapshots:   0 total
+Time:        69.365 s, estimated 70 s
+Ran all test suites.

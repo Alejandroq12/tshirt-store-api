@@ -1,0 +1,64 @@
+structure-audit — HEAD @ b5d0387 — 2026-09-19 01:25 CST
+
+== src/auth — OVER: 14 files across 6 stems (limit 10 files, 3 stems) ==
+  auth                    auth.controller.spec.ts  auth.controller.ts  auth.dto.ts  auth.module.ts  auth.service.spec.ts  auth.service.ts
+  authenticated-user      authenticated-user.ts
+  index                   index.ts
+  password                password.service.spec.ts  password.service.ts
+  secret-token            secret-token.service.spec.ts  secret-token.service.ts
+  token                   token.service.spec.ts  token.service.ts
+  crossings: 50 lines outside the folder resolve to a path inside it
+
+== src/authorization — mixed: 6 files across 5 stems (limit 10 files, 3 stems) ==
+  ability                 ability.types.ts
+  authorization           authorization.module.ts
+  casl-ability            casl-ability.factory.spec.ts  casl-ability.factory.ts
+  index                   index.ts
+  registered-abilities    registered-abilities.spec.ts
+  crossings: 34 lines outside the folder resolve to a path inside it
+
+== src/config — mixed: 8 files across 5 stems (limit 10 files, 3 stems) ==
+  config                  config.module.ts
+  env                     env.validation.spec.ts  env.validation.ts
+  index                   index.ts
+  published-placeholders  published-placeholders.spec.ts  published-placeholders.ts
+  seed-env                seed-env.validation.spec.ts  seed-env.validation.ts
+  crossings: 34 lines outside the folder resolve to a path inside it
+
+== src/logging — mixed: 7 files across 4 stems (limit 10 files, 3 stems) ==
+  logging                 logging.module.ts
+  redaction               redaction.spec.ts  redaction.ts
+  request-logging         request-logging.spec.ts  request-logging.ts
+  secret-scrubber         secret-scrubber.spec.ts  secret-scrubber.ts
+  crossings: 6 lines outside the folder resolve to a path inside it
+
+== src/notifications — OVER: 12 files across 4 stems (limit 10 files, 3 stems) ==
+  notifications           notifications.module.ts
+  reconciliation          reconciliation.producer.spec.ts  reconciliation.producer.ts  reconciliation.worker.spec.ts  reconciliation.worker.ts
+  stock-cycle             stock-cycle.service.spec.ts  stock-cycle.service.ts
+  stock-notification      stock-notification.producer.spec.ts  stock-notification.producer.ts  stock-notification.queue.ts  stock-notification.worker.spec.ts  stock-notification.worker.ts
+  crossings: 22 lines outside the folder resolve to a path inside it
+
+== src/payments — OVER: 11 files across 5 stems (limit 10 files, 3 stems) ==
+  payment-intents         payment-intents.controller.ts
+  payment-links           payment-links.controller.ts
+  payments                payments.controllers.spec.ts  payments.dto.ts  payments.module.ts  payments.service.spec.ts  payments.service.ts
+  stripe                  stripe.client.ts
+  stripe-webhook          stripe-webhook.controller.ts  stripe-webhook.service.spec.ts  stripe-webhook.service.ts
+  crossings: 6 lines outside the folder resolve to a path inside it
+
+== src/storage — mixed: 6 files across 4 stems (limit 10 files, 3 stems) ==
+  image-upload            image-upload.constants.spec.ts  image-upload.constants.ts
+  index                   index.ts
+  s3-storage              s3-storage.service.spec.ts  s3-storage.service.ts
+  storage                 storage.module.ts
+  crossings: 9 lines outside the folder resolve to a path inside it
+
+== order, safest first: fewest crossings ==
+     6  mixed  src/logging
+     6  OVER   src/payments
+     9  mixed  src/storage
+    22  OVER   src/notifications
+    34  mixed  src/authorization
+    34  mixed  src/config
+    50  OVER   src/auth

@@ -85,8 +85,8 @@ src/
   images/          S3 upload, fallback vs. per-SKU assignment
   cart/            client cart and current-price totals
   orders/          order snapshots, history and status lifecycle
-  payments/        Stripe links, intents and signed webhooks
-  notifications/   stock cycles, BullMQ workers and reconciliation
+  payments/        Stripe: methods/ links+intents · webhook/ settlement · stripe/ the SDK façade
+  notifications/   stock-cycle/ · delivery/ · reconciliation/, queue names at the root
   common/          Problem Details filter, problem types, validation helpers
   config/          environment schema that fails the boot
   logging/         pino, redaction paths, secret scrubber

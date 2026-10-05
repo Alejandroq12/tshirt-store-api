@@ -7,9 +7,9 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { PasswordService } from './password.service';
-import { SecretTokenService } from './secret-token.service';
-import { TokenService } from './token.service';
+import { PasswordService } from './credentials/password.service';
+import { SecretTokenService } from './credentials/secret-token.service';
+import { TokenService } from './credentials/token.service';
 
 @Module({
   imports: [JwtModule.register({}), PrismaModule, MailModule],
