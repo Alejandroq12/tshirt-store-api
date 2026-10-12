@@ -4,6 +4,63 @@ NestJS 11 + Prisma 6 + PostgreSQL 17 service that implements
 [`api/openapi.yaml`](api/openapi.yaml). The contract is the specification; the
 code follows it, never the other way around.
 
+## Product
+
+The product is the backend API of an online T-shirt store. It gives the store
+one place to sell T-shirts in sizes and colors, take Stripe payments, and keep
+stock and order history consistent.
+
+Who calls it and what they want:
+
+- **Anonymous visitor:** "Show me the shirts you sell, their sizes, colors and prices."
+- **Client:** "Let me like shirts, buy them, pay, track my orders, and
+  warn me before a shirt I like sells out."
+- **Manager:** "Let me keep the catalogue, images and stock current, move paid
+  orders to shipping, and send a buyer a link to pay for one shirt."
+
+Client flow:
+
+1. Browse active products by category and open one to see its SKUs and images.
+2. Like a product. Likes decide who gets the low-stock email.
+3. Add SKUs to the cart. The cart shows current prices.
+4. Create an order from the cart. It is `pending` and freezes items and prices.
+5. Create a Payment Intent. Stock is checked again; the amount comes from the order.
+6. Stripe sends a signed webhook. The order becomes `paid`, stock drops, and the
+   paid quantities leave the cart.
+7. Confirmation is the order showing `paid`. A confirmation email is not defined.
+8. When a liked product's total stock drops to 3 or less, clients who have not
+   bought it get one email with a product image.
+
+Manager flow:
+
+1. Create a product in a seeded category.
+2. Add SKUs: size, color, price, stock and a unique code.
+3. Upload images: a product fallback, or one image shared by several SKUs.
+4. Activate the product (needs a fallback primary image), deactivate or retire it.
+5. Change price or stock by updating a SKU.
+6. Read all orders and move them `paid` → `processing` → `shipped`.
+7. Create a Payment Link for one SKU and quantity. The order exists only after
+   Stripe reports payment; the buyer is matched to a client by checkout email.
+
+Rules a user notices:
+
+- Prices are frozen on the order, so a later price change never alters a purchase.
+- One `pending` order per client, so payment always targets one known order.
+- Stock drops only when payment is confirmed, so unpaid orders never consume stock.
+- Carts reserve nothing, so stock is checked again at payment under locks.
+- Retired products stay stored, so past orders and SKU codes keep their meaning.
+- One low-stock email per client per restock cycle, so clients are not spammed.
+
+Not done on purpose: category management, manager sign-up, `GET /skus`,
+refunds (cancelling a paid order restores stock; money goes back through
+Stripe by hand), image deletion or reassignment, `/health`, `/docs`, admin pages.
+
+When in doubt, in this order:
+
+1. **Never oversell.** Stock changes under locks, for every line or none.
+2. **Never lose or alter a purchase.** Orders, items and products are never deleted.
+3. **Never trust the caller for payment.** Only a verified Stripe webhook sets `paid`.
+
 ## The scope rule — read this before proposing anything
 
 This repository is a training deliverable evaluated against a fixed set of

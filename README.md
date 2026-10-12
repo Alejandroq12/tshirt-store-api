@@ -1,5 +1,10 @@
 # T-Shirt Store API
 
+**Who this API is for.** Anonymous visitors browse T-shirts. Clients like,
+buy and pay for them, and track their orders. Managers run the catalogue,
+stock and shipping, and send Payment Links. See the
+[Product section in CLAUDE.md](CLAUDE.md#product) for the flows and rules.
+
 A NestJS API for a T-shirt store. It implements all 28 operations in
 [`api/openapi.yaml`](api/openapi.yaml), including authentication, catalog,
 carts, orders, Stripe payments, signed webhooks, and low-stock email jobs.
