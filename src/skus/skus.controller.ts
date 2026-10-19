@@ -8,7 +8,8 @@ import { CheckAbilities } from '../authorization/decorators/check-abilities.deco
 import { API_PREFIX } from '../bootstrap';
 import { ValidationProblemException } from '../common/problems';
 import { CreateSkuRequest, SkuIdParams, UpdateSkuRequest } from './skus.dto';
-import { SkuDetailResponse, SkuResponse, SkusService } from './skus.service';
+import { SkusService } from './services/skus.service';
+import type { SkuDetailResponse, SkuResponse } from './types/skus.types';
 
 @Controller('skus')
 export class SkusController {

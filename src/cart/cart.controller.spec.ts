@@ -10,7 +10,7 @@ import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
 import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { CartController } from './cart.controller';
-import type { CartService } from './cart.service';
+import type { CartService } from './services/cart.service';
 
 type MethodName = keyof Pick<
   CartController,

@@ -1,22 +1,13 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, type ProductImage } from '@prisma/client';
 
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   S3StorageService,
   type UploadRequest,
-} from '../storage/s3-storage.service';
-import type { UploadProductImageRequest } from './images.dto';
-
-export interface ImageAssetResponse {
-  id: string;
-  productId: string;
-  url: string;
-  skuIds: string[];
-  isProductPrimary: boolean;
-  primaryForSkuIds: string[];
-  createdAt: string;
-}
+} from '../../storage/s3-storage.service';
+import type { UploadProductImageRequest } from '../images.dto';
+import type { ImageAssetResponse } from '../types/images.types';
 
 interface PersistedImage {
   image: ProductImage;

@@ -13,23 +13,28 @@ import {
   UserRole,
 } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
 import {
   PROBLEM_TYPE,
   ProblemException,
   ValidationProblemException,
-} from '../common/problems';
-import type { EnvironmentVariables } from '../config/env.validation';
-import { StockCycleService } from '../notifications/stock-cycle/stock-cycle.service';
-import { StockNotificationProducer } from '../notifications/delivery/stock-notification.producer';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../../common/problems';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
+import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   ListMyOrdersQuery,
   ListOrdersQuery,
   OrderStatusFilter,
   OrderStatusUpdate,
   OrderStatusUpdateRequest,
-} from './orders.dto';
+} from '../orders.dto';
+import type {
+  OrderItemResponse,
+  OrderResponse,
+  OrderPageResponse,
+} from '../types/orders.types';
 
 const ORDER_INCLUDE = {
   items: { orderBy: { id: 'asc' } },
@@ -64,7 +69,7 @@ const RESPONSE_STATUS = {
   [PrismaOrderStatus.PROCESSING]: 'processing',
   [PrismaOrderStatus.SHIPPED]: 'shipped',
   [PrismaOrderStatus.CANCELLED]: 'cancelled',
-} as const satisfies Record<PrismaOrderStatus, string>;
+} as const satisfies Record<PrismaOrderStatus, OrderResponse['status']>;
 
 const PRISMA_STATUS = {
   [OrderStatusFilter.PENDING]: PrismaOrderStatus.PENDING,
@@ -77,7 +82,10 @@ const PRISMA_STATUS = {
 const RESPONSE_PAYMENT_METHOD = {
   [PrismaPaymentMethod.PAYMENT_LINK]: 'payment_link',
   [PrismaPaymentMethod.PAYMENT_INTENT]: 'payment_intent',
-} as const satisfies Record<PrismaPaymentMethod, string>;
+} as const satisfies Record<
+  PrismaPaymentMethod,
+  OrderResponse['paymentMethod']
+>;
 
 const isUniqueViolation = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -96,38 +104,6 @@ const pendingOrderProblem = (): ProblemException =>
     title: 'Pending order already exists',
     status: HttpStatus.CONFLICT,
   });
-
-export interface OrderItemResponse {
-  id: string;
-  productId: string;
-  skuId: string;
-  productName: string;
-  skuCode: string;
-  size: string;
-  color: string;
-  unitPrice: string;
-  quantity: number;
-  lineTotal: string;
-}
-
-export interface OrderResponse {
-  id: string;
-  clientId: string;
-  status: (typeof RESPONSE_STATUS)[PrismaOrderStatus];
-  paymentMethod: (typeof RESPONSE_PAYMENT_METHOD)[PrismaPaymentMethod];
-  items: OrderItemResponse[];
-  totalAmount: string;
-  currency: string;
-  createdAt: string;
-  updatedAt: string;
-  paidAt: string | null;
-  cancelledAt: string | null;
-}
-
-export interface OrderPageResponse {
-  items: OrderResponse[];
-  pagination: { limit: number; offset: number; total: number };
-}
 
 @Injectable()
 export class OrdersService {

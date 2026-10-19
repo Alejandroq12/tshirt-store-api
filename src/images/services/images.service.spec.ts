@@ -1,8 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import type { ProductImage } from '@prisma/client';
 
-import type { PrismaService } from '../prisma/prisma.service';
-import type { S3StorageService } from '../storage/s3-storage.service';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { S3StorageService } from '../../storage/s3-storage.service';
 import { ImagesService } from './images.service';
 
 const NOW = new Date('2026-08-28T12:00:00.000Z');

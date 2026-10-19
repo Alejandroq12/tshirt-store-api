@@ -5,7 +5,7 @@ import type { Product, ProductSku, User } from '@prisma/client';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import type { ImageAssetResponse } from '../src/images/images.service';
+import type { ImageAssetResponse } from '../src/images/types/images.types';
 import type { ProductDetailResponse } from '../src/products/products.service';
 import { ProductStatus } from '../src/products/products.dto';
 import { PrismaService } from '../src/prisma/prisma.service';

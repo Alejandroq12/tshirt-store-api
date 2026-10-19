@@ -2,10 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
-import type { EnvironmentVariables } from '../config/env.validation';
-import { PrismaService } from '../prisma/prisma.service';
-import { CartItemCreateRequest, CartItemUpdateRequest } from './cart.dto';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CartItemCreateRequest, CartItemUpdateRequest } from '../cart.dto';
+import type { CartItemResponse, CartResponse } from '../types/cart.types';
 
 const CART_ITEM_SELECT = {
   id: true,
@@ -36,27 +37,6 @@ type CartRecord = Prisma.CartGetPayload<{ select: typeof CART_SELECT }>;
 type CartItemRecord = Prisma.CartItemGetPayload<{
   select: typeof CART_ITEM_SELECT;
 }>;
-
-export interface CartItemResponse {
-  id: string;
-  skuId: string;
-  productId: string;
-  productName: string;
-  skuCode: string;
-  size: string;
-  color: string;
-  quantity: number;
-  unitPrice: string;
-  lineTotal: string;
-}
-
-export interface CartResponse {
-  id: string;
-  items: CartItemResponse[];
-  subtotalAmount: string;
-  currency: string;
-  updatedAt: string;
-}
 
 const isUniqueViolation = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError &&

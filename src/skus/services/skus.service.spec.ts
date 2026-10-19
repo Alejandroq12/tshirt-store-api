@@ -2,11 +2,11 @@ import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
-import type { EnvironmentVariables } from '../config/env.validation';
-import type { StockCycleService } from '../notifications/stock-cycle/stock-cycle.service';
-import type { StockNotificationProducer } from '../notifications/delivery/stock-notification.producer';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import type { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
+import type { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { SkusService } from './skus.service';
 
 const NOW = new Date('2026-08-28T12:00:00.000Z');

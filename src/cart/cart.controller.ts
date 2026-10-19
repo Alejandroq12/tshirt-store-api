@@ -18,7 +18,8 @@ import {
   CartItemIdParams,
   CartItemUpdateRequest,
 } from './cart.dto';
-import { CartItemResponse, CartResponse, CartService } from './cart.service';
+import { CartService } from './services/cart.service';
+import type { CartItemResponse, CartResponse } from './types/cart.types';
 
 @Controller('me/cart')
 export class CartController {

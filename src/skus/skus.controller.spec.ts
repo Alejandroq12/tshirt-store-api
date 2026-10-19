@@ -7,7 +7,7 @@ import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { ValidationProblemException } from '../common/problems';
 import { SkusController } from './skus.controller';
 import { UpdateSkuRequest } from './skus.dto';
-import type { SkusService } from './skus.service';
+import type { SkusService } from './services/skus.service';
 
 type MethodName = keyof Pick<
   SkusController,

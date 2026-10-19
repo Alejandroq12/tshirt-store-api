@@ -15,7 +15,7 @@ import {
   OrderStatusUpdate,
   OrderStatusUpdateRequest,
 } from './orders.dto';
-import type { OrdersService } from './orders.service';
+import type { OrdersService } from './services/orders.service';
 
 type MethodName = keyof Pick<
   OrdersController,

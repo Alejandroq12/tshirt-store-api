@@ -9,7 +9,7 @@ import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { ValidationProblemException } from '../common/problems';
 import { IMAGE_MAX_BYTES } from '../storage/image-upload.constants';
 import { ImagesController } from './images.controller';
-import type { ImagesService } from './images.service';
+import type { ImagesService } from './services/images.service';
 
 const PRODUCT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 

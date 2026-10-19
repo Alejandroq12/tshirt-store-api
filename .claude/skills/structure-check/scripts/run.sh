@@ -15,7 +15,7 @@ label="${1:-}"
 root=$(normalize_root "${ROOT:-src}") || exit 2
 limit="${LIMIT:-10}"
 stems_limit="${STEMS:-3}"
-audit="${AUDIT:-docs/ai-module/evidence/structure-audit-before.md}"
+audit="${AUDIT:-docs/ai-module/evidence/structure-audit-layout.md}"
 require_inputs "$root" "$limit" "$stems_limit" "$label"
 gate=(typecheck lint build test:ci)
 

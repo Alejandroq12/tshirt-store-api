@@ -10,7 +10,7 @@ import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.
 import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { MyOrdersController } from './my-orders.controller';
 import { OrderStatusFilter } from './orders.dto';
-import type { OrdersService } from './orders.service';
+import type { OrdersService } from './services/orders.service';
 
 const methodTarget = (): object => {
   const target = Object.getOwnPropertyDescriptor(

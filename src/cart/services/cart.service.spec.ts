@@ -2,9 +2,9 @@ import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
-import type { EnvironmentVariables } from '../config/env.validation';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { CartService } from './cart.service';
 
 const NOW = new Date('2026-09-03T12:00:00.000Z');

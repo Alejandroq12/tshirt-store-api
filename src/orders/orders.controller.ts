@@ -19,11 +19,8 @@ import {
   OrderIdParams,
   OrderStatusUpdateRequest,
 } from './orders.dto';
-import {
-  OrderPageResponse,
-  OrderResponse,
-  OrdersService,
-} from './orders.service';
+import { OrdersService } from './services/orders.service';
+import type { OrderPageResponse, OrderResponse } from './types/orders.types';
 
 @Controller('orders')
 export class OrdersController {

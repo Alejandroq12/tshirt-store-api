@@ -2,12 +2,17 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type ProductSku, UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
-import type { EnvironmentVariables } from '../config/env.validation';
-import { StockCycleService } from '../notifications/stock-cycle/stock-cycle.service';
-import { StockNotificationProducer } from '../notifications/delivery/stock-notification.producer';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateSkuRequest, UpdateSkuRequest } from './skus.dto';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
+import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateSkuRequest, UpdateSkuRequest } from '../skus.dto';
+import type {
+  ImageAssetResponse,
+  SkuDetailResponse,
+  SkuResponse,
+} from '../types/skus.types';
 
 const SKU_DETAIL_INCLUDE = {
   product: {
@@ -59,35 +64,6 @@ type SkuCore = Pick<
   | 'createdAt'
   | 'updatedAt'
 >;
-
-export interface SkuResponse {
-  id: string;
-  productId: string;
-  skuCode: string;
-  size: string;
-  color: string;
-  price: string;
-  currency: string;
-  stockQuantity: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ImageAssetResponse {
-  id: string;
-  productId: string;
-  url: string;
-  skuIds: string[];
-  isProductPrimary: boolean;
-  primaryForSkuIds: string[];
-  createdAt: string;
-}
-
-export interface SkuDetailResponse extends SkuResponse {
-  images: ImageAssetResponse[];
-  primaryImageId: string | null;
-  imageSource: 'sku' | 'product' | 'none';
-}
 
 const visibleSkuWhere = (
   user?: AuthenticatedUser,
