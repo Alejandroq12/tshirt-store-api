@@ -303,3 +303,26 @@ See also [`docs/architecture.md`](docs/architecture.md),
 [`docs/data-lifecycle.md`](docs/data-lifecycle.md),
 [`docs/implementation-notes.md`](docs/implementation-notes.md), and
 [`docs/db.dbml`](docs/db.dbml).
+
+## Reorganising a folder
+
+A folder fails the structure rule when it has more than 10 files and more than
+3 name stems at once.
+
+1. `/structure-audit before`: diagnosis and proposal; changes nothing.
+2. `/structure-check before`: baseline, rule red and gate green.
+3. Move one folder with `git mv` and fix its imports. If you depart from the
+   proposal, add one line to the audit's `deviations` block.
+4. `/structure-check`: if it passes, commit.
+5. Repeat steps 3–4 for each folder.
+6. Update the layout trees in `README.md` and `CLAUDE.md`.
+7. `/structure-check after`: final verdict.
+8. `npm run test:e2e`: append its tail to the evidence file.
+9. Update the write-up and open the PR.
+
+Example move:
+
+```bash
+mkdir -p src/payments/stripe
+git mv src/payments/stripe.client.ts src/payments/stripe/stripe.client.ts
+```
