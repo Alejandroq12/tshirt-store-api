@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../../auth/types/session-principal';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { CartService } from './cart.service';
@@ -12,7 +12,7 @@ const CART_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ITEM_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const SKU_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const PRODUCT_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
-const CLIENT: AuthenticatedUser = {
+const CLIENT: SessionPrincipal = {
   id: '11111111-1111-4111-8111-111111111111',
   role: 'CLIENT',
   sessionId: '22222222-2222-4222-8222-222222222222',

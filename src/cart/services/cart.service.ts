@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../../auth/types/session-principal';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CartItemCreateRequest, CartItemUpdateRequest } from '../cart.dto';
@@ -53,7 +53,7 @@ export class CartService {
     this.currency = config.get('STORE_CURRENCY', { infer: true });
   }
 
-  async getOrCreate(user: AuthenticatedUser): Promise<CartResponse> {
+  async getOrCreate(user: SessionPrincipal): Promise<CartResponse> {
     const cartId = await this.getOrCreateCartId(user.id);
     const cart = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cartId },
@@ -64,7 +64,7 @@ export class CartService {
   }
 
   async addItem(
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
     input: CartItemCreateRequest,
   ): Promise<CartItemResponse> {
     const sku = await this.prisma.productSku.findFirst({
@@ -87,7 +87,7 @@ export class CartService {
   }
 
   async updateItem(
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
     itemId: string,
     input: CartItemUpdateRequest,
   ): Promise<CartItemResponse> {
@@ -107,7 +107,7 @@ export class CartService {
     return this.cartItemResponse(item);
   }
 
-  async removeItem(user: AuthenticatedUser, itemId: string): Promise<void> {
+  async removeItem(user: SessionPrincipal, itemId: string): Promise<void> {
     const result = await this.prisma.cartItem.deleteMany({
       where: { id: itemId, cart: { clientId: user.id } },
     });

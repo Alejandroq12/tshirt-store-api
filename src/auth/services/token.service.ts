@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
 
 import type { EnvironmentVariables } from '../../config/env.validation';
-import type { AuthenticatedUser } from '../types/authenticated-user';
+import type { SessionPrincipal } from '../types/session-principal';
 import type {
   AccessTokenClaims,
   RefreshTokenClaims,
@@ -30,7 +30,7 @@ export class TokenService {
     private readonly config: ConfigService<EnvironmentVariables, true>,
   ) {}
 
-  async issueAccessToken(user: AuthenticatedUser): Promise<IssuedToken> {
+  async issueAccessToken(user: SessionPrincipal): Promise<IssuedToken> {
     const claims: AccessTokenClaims = {
       sub: user.id,
       role: user.role,

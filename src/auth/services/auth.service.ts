@@ -12,7 +12,7 @@ import { type User, UserRole } from '@prisma/client';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { type EmailMessage, MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import type { AuthenticatedUser } from '../types/authenticated-user';
+import type { SessionPrincipal } from '../types/session-principal';
 import {
   ChangePasswordRequest,
   LoginRequest,
@@ -125,7 +125,7 @@ export class AuthService {
     return issued.response;
   }
 
-  async logout(user: AuthenticatedUser): Promise<void> {
+  async logout(user: SessionPrincipal): Promise<void> {
     await this.prisma.session.updateMany({
       where: { id: user.sessionId, userId: user.id, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -237,7 +237,7 @@ export class AuthService {
   }
 
   async changePassword(
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
     input: ChangePasswordRequest,
   ): Promise<void> {
     const stored = await this.prisma.user.findUnique({
@@ -269,7 +269,7 @@ export class AuthService {
     await this.sendPasswordChanged(stored.email);
   }
 
-  async isSessionActive(user: AuthenticatedUser): Promise<boolean> {
+  async isSessionActive(user: SessionPrincipal): Promise<boolean> {
     const session = await this.prisma.session.findFirst({
       where: {
         id: user.sessionId,
@@ -293,7 +293,7 @@ export class AuthService {
     };
   }> {
     const sessionId = randomUUID();
-    const authenticatedUser: AuthenticatedUser = {
+    const authenticatedUser: SessionPrincipal = {
       id: user.id,
       role: user.role,
       sessionId,

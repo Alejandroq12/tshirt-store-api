@@ -6,7 +6,7 @@ import {
   PATH_METADATA,
 } from '@nestjs/common/constants';
 
-import type { AuthenticatedUser } from '../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
 import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { CartController } from './cart.controller';
@@ -38,7 +38,7 @@ describe('CartController', () => {
     removeItem: jest.fn(),
   };
   const controller = new CartController(cart as unknown as CartService);
-  const client: AuthenticatedUser = {
+  const client: SessionPrincipal = {
     id: '11111111-1111-4111-8111-111111111111',
     role: 'CLIENT',
     sessionId: '22222222-2222-4222-8222-222222222222',

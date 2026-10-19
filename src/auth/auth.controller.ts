@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 
 import { PasswordResetThrottle } from '../security/password-reset-throttle.decorator';
-import type { AuthenticatedUser } from './types/authenticated-user';
+import type { SessionPrincipal } from './types/session-principal';
 import {
   ChangePasswordRequest,
   ForgotPasswordRequest,
@@ -37,7 +37,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+  logout(@CurrentUser() user: SessionPrincipal): Promise<void> {
     return this.auth.logout(user);
   }
 
@@ -69,7 +69,7 @@ export class AuthController {
   @Post('change-password')
   @HttpCode(HttpStatus.NO_CONTENT)
   changePassword(
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: SessionPrincipal,
     @Body() input: ChangePasswordRequest,
   ): Promise<void> {
     return this.auth.changePassword(user, input);

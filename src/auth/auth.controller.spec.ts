@@ -1,7 +1,7 @@
 import { GUARDS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { ThrottlerGuard } from '@nestjs/throttler';
 
-import type { AuthenticatedUser } from './types/authenticated-user';
+import type { SessionPrincipal } from './types/session-principal';
 import { AuthController } from './auth.controller';
 import type { AuthService } from './services/auth.service';
 import { IS_PUBLIC } from './decorators/public.decorator';
@@ -38,7 +38,7 @@ describe('AuthController', () => {
     changePassword: jest.fn(),
   };
   const controller = new AuthController(auth as unknown as AuthService);
-  const user: AuthenticatedUser = {
+  const user: SessionPrincipal = {
     id: '11111111-1111-4111-8111-111111111111',
     role: 'CLIENT',
     sessionId: '22222222-2222-4222-8222-222222222222',

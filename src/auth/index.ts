@@ -1,4 +1,4 @@
-export type { AuthenticatedUser } from './types/authenticated-user';
+export type { SessionPrincipal } from './types/session-principal';
 export { AuthController } from './auth.controller';
 export * from './auth.dto';
 export { AuthModule } from './auth.module';

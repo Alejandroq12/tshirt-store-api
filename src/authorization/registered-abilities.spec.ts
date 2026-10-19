@@ -2,7 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import type { AuthenticatedUser } from '../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { CartModule } from '../cart/cart.module';
 import { ImagesModule } from '../images/images.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -19,13 +19,13 @@ import { SkusModule } from '../skus/skus.module';
 import type { AppAction, AppSubjects } from './ability.types';
 import { CaslAbilityFactory } from './casl-ability.factory';
 
-const MANAGER: AuthenticatedUser = {
+const MANAGER: SessionPrincipal = {
   id: '11111111-1111-4111-8111-111111111111',
   role: 'MANAGER',
   sessionId: '22222222-2222-4222-8222-222222222222',
 };
 
-const CLIENT: AuthenticatedUser = { ...MANAGER, role: 'CLIENT' };
+const CLIENT: SessionPrincipal = { ...MANAGER, role: 'CLIENT' };
 
 @Global()
 @Module({
@@ -81,7 +81,7 @@ describe('the abilities each feature registers', () => {
   afterAll(() => moduleRef.close());
 
   const can = (
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
     action: AppAction,
     subject: AppSubjects,
   ) => abilities.createForUser(user).can(action, subject);

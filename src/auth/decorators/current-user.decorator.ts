@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 
-import type { AuthenticatedUser } from '../types/authenticated-user';
+import type { SessionPrincipal } from '../types/session-principal';
 
 export interface CurrentUserOptions {
   optional?: boolean;
@@ -14,7 +14,7 @@ export interface CurrentUserOptions {
 export const resolveCurrentUser = (
   request: Pick<Request, 'user'>,
   options: CurrentUserOptions = {},
-): AuthenticatedUser | undefined => {
+): SessionPrincipal | undefined => {
   if (!request.user && !options.optional) {
     throw new UnauthorizedException();
   }
@@ -26,6 +26,6 @@ export const CurrentUser = createParamDecorator(
   (
     options: CurrentUserOptions | undefined,
     context: ExecutionContext,
-  ): AuthenticatedUser | undefined =>
+  ): SessionPrincipal | undefined =>
     resolveCurrentUser(context.switchToHttp().getRequest<Request>(), options),
 );

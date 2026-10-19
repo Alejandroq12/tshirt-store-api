@@ -1,6 +1,6 @@
 import type { UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from './authenticated-user';
+import type { SessionPrincipal } from './session-principal';
 
 export interface AccessTokenClaims {
   sub: string;
@@ -18,4 +18,4 @@ export interface IssuedToken {
   expiresAt: Date;
 }
 
-export type SessionSubject = Pick<AuthenticatedUser, 'id' | 'sessionId'>;
+export type SessionSubject = Pick<SessionPrincipal, 'id' | 'sessionId'>;

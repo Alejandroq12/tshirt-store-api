@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type ProductSku, UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../../auth/types/session-principal';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
 import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
@@ -66,7 +66,7 @@ type SkuCore = Pick<
 >;
 
 const visibleSkuWhere = (
-  user?: AuthenticatedUser,
+  user?: SessionPrincipal,
 ): Prisma.ProductSkuWhereInput =>
   user?.role === UserRole.MANAGER
     ? {}
@@ -109,7 +109,7 @@ export class SkusService {
 
   async get(
     skuId: string,
-    user?: AuthenticatedUser,
+    user?: SessionPrincipal,
   ): Promise<SkuDetailResponse> {
     const sku = await this.prisma.productSku.findFirst({
       where: { id: skuId, ...visibleSkuWhere(user) },

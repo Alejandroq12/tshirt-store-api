@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma, UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../../auth/types/session-principal';
 import {
   PROBLEM_TYPE,
   type ProblemDetail,
@@ -93,7 +93,7 @@ export class PaymentsService {
 
   async createLink(
     input: PaymentLinkCreateRequest,
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
   ): Promise<PaymentLinkResponse> {
     const sku = await this.prisma.productSku.findUnique({
       where: { id: input.skuId },
@@ -148,7 +148,7 @@ export class PaymentsService {
 
   async createIntent(
     input: PaymentIntentCreateRequest,
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
   ): Promise<PaymentIntentResponse> {
     if (user.role !== UserRole.CLIENT) throw new ForbiddenException();
 

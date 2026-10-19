@@ -6,7 +6,7 @@ import {
   PATH_METADATA,
 } from '@nestjs/common/constants';
 
-import type { AuthenticatedUser } from '../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { IS_PUBLIC } from '../auth/decorators/public.decorator';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
 import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
@@ -41,7 +41,7 @@ describe('payment controllers', () => {
   const webhook = new StripeWebhookController(
     webhooks as unknown as StripeWebhookService,
   );
-  const user: AuthenticatedUser = {
+  const user: SessionPrincipal = {
     id: '11111111-1111-4111-8111-111111111111',
     role: 'CLIENT',
     sessionId: '22222222-2222-4222-8222-222222222222',

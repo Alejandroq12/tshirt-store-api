@@ -6,7 +6,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 
-import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../../auth/types/session-principal';
 import { CaslAbilityFactory } from '../casl-ability.factory';
 import {
   REQUIRED_ABILITIES,
@@ -14,18 +14,18 @@ import {
 } from '../decorators/check-abilities.decorator';
 import { AbilitiesGuard } from './abilities.guard';
 
-const MANAGER: AuthenticatedUser = {
+const MANAGER: SessionPrincipal = {
   id: 'manager-id',
   role: 'MANAGER',
   sessionId: 'manager-session',
 };
-const CLIENT: AuthenticatedUser = {
+const CLIENT: SessionPrincipal = {
   id: 'client-id',
   role: 'CLIENT',
   sessionId: 'client-session',
 };
 
-const contextFor = (user?: AuthenticatedUser): ExecutionContext =>
+const contextFor = (user?: SessionPrincipal): ExecutionContext =>
   ({
     getHandler: () => () => undefined,
     getClass: () => class {},

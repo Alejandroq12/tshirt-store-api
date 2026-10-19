@@ -10,7 +10,7 @@ import {
   Prisma,
 } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../../auth/types/session-principal';
 import { PROBLEM_TYPE } from '../../common/problems';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
@@ -34,12 +34,12 @@ const PRODUCT_B_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const SKU_A_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const SKU_B_ID = '99999999-9999-4999-8999-999999999999';
 
-const CLIENT: AuthenticatedUser = {
+const CLIENT: SessionPrincipal = {
   id: CLIENT_ID,
   role: 'CLIENT',
   sessionId: '33333333-3333-4333-8333-333333333333',
 };
-const MANAGER: AuthenticatedUser = {
+const MANAGER: SessionPrincipal = {
   id: '44444444-4444-4444-8444-444444444444',
   role: 'MANAGER',
   sessionId: '55555555-5555-4555-8555-555555555555',

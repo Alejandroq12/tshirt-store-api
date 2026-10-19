@@ -13,7 +13,7 @@ import {
   UserRole,
 } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../../auth/types/session-principal';
 import {
   PROBLEM_TYPE,
   ProblemException,
@@ -118,7 +118,7 @@ export class OrdersService {
     this.currency = config.get('STORE_CURRENCY', { infer: true });
   }
 
-  async createFromCart(user: AuthenticatedUser): Promise<OrderResponse> {
+  async createFromCart(user: SessionPrincipal): Promise<OrderResponse> {
     const order = await this.prisma.$transaction(async (transaction) => {
       const cart = await transaction.cart.findUnique({
         where: { clientId: user.id },
@@ -176,7 +176,7 @@ export class OrdersService {
     return this.orderResponse(order);
   }
 
-  async get(orderId: string, user: AuthenticatedUser): Promise<OrderResponse> {
+  async get(orderId: string, user: SessionPrincipal): Promise<OrderResponse> {
     const order = await this.prisma.order.findFirst({
       where: {
         id: orderId,
@@ -208,7 +208,7 @@ export class OrdersService {
 
   async listMine(
     query: ListMyOrdersQuery,
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
   ): Promise<OrderPageResponse> {
     const from = query.from === undefined ? undefined : new Date(query.from);
     const to = query.to === undefined ? undefined : new Date(query.to);
@@ -271,7 +271,7 @@ export class OrdersService {
   async updateStatus(
     orderId: string,
     input: OrderStatusUpdateRequest,
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
   ): Promise<OrderResponse> {
     this.requireRoleFor(input.status, user.role);
 

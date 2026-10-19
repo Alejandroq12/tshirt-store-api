@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type Product, UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
+import type { SessionPrincipal } from '../../auth/types/session-principal';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -87,11 +87,11 @@ const productResponse = (product: ProductCore): ProductResponse => ({
 });
 
 const visibleProductWhere = (
-  user?: AuthenticatedUser,
+  user?: SessionPrincipal,
 ): Prisma.ProductWhereInput =>
   user?.role === UserRole.MANAGER ? {} : { isActive: true, deletedAt: null };
 
-const clientIdOf = (user?: AuthenticatedUser): string | undefined =>
+const clientIdOf = (user?: SessionPrincipal): string | undefined =>
   user?.role === UserRole.CLIENT ? user.id : undefined;
 
 @Injectable()
@@ -107,7 +107,7 @@ export class ProductsService {
 
   async list(
     query: ListProductsQuery,
-    user?: AuthenticatedUser,
+    user?: SessionPrincipal,
   ): Promise<ProductPageResponse> {
     const where: Prisma.ProductWhereInput = {
       ...visibleProductWhere(user),
@@ -170,7 +170,7 @@ export class ProductsService {
 
   async get(
     productId: string,
-    user?: AuthenticatedUser,
+    user?: SessionPrincipal,
   ): Promise<ProductDetailResponse> {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, ...visibleProductWhere(user) },
@@ -241,7 +241,7 @@ export class ProductsService {
   async setLiked(
     productId: string,
     input: LikeUpdateRequest,
-    user: AuthenticatedUser,
+    user: SessionPrincipal,
   ): Promise<LikeStateResponse> {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, ...visibleProductWhere(user) },
