@@ -113,3 +113,25 @@ after the rule gained the stem count. Neither proved the proposals are the
 only sensible grouping. The proposal check verifies paths, not contents: a
 file at its proposed place with the wrong content passes it, and the gate
 is what catches that.
+
+## Follow-up: the slice layout
+
+The reviewer's other two points were a `services` folder inside each slice
+with the controllers outside, a folder for the types, and a less ambiguous
+name than `AuthenticatedUser`. The follow-up PR gives the seven slices that
+serve contract operations one shape — the module, the controllers and the DTO
+at the root, every `@Injectable()` provider in `services/`, the response
+interfaces in `types/` — which folds `payments/methods`, `payments/webhook`,
+`payments/stripe` and `auth/credentials` into it, moves the 17 `*Response`
+interfaces and the token claims out of the service files, and renames the
+principal to `SessionPrincipal`: the user and session a request runs as. The
+same two skills ran under a new label, so the evidence above is unchanged:
+`evidence/structure-audit-layout.{txt,md}` (no folder over the limit; the
+proposal is the shape, one tree per slice, 72 paths),
+`evidence/structure-check-layout-before.txt` (rule 0, proposal 1 with 28 not
+yet moved and 9 type files not yet created, gate 0) and
+`evidence/structure-check-layout-after.txt` (rule 0 with `src/auth/services`
+and `src/payments` marked `mixed` by construction and recorded as such,
+proposal 0 with 72 kept, gate 0, e2e 96 of 96). One commit per slice, each
+green on its own; the rename is a commit of its own. The check's default
+report is now the layout audit.
