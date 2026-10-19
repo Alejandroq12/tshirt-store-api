@@ -19,7 +19,7 @@ import type {
   User,
 } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 
 export type AppAction =
   'manage' | 'create' | 'read' | 'list' | 'update' | 'delete';

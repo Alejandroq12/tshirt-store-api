@@ -10,7 +10,7 @@ import {
   Prisma,
 } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
 import { PROBLEM_TYPE } from '../../common/problems';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';

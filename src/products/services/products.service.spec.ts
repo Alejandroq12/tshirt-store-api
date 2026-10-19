@@ -2,7 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { ProductStatus } from '../products.dto';

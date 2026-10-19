@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common/constants';
 import { validate } from 'class-validator';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
 import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { OrdersController } from './orders.controller';

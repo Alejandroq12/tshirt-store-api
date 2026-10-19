@@ -4,7 +4,13 @@ import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
 
 import type { EnvironmentVariables } from '../../config/env.validation';
-import type { AuthenticatedUser } from '../authenticated-user';
+import type { AuthenticatedUser } from '../types/authenticated-user';
+import type {
+  AccessTokenClaims,
+  RefreshTokenClaims,
+  IssuedToken,
+  SessionSubject,
+} from '../types/token.types';
 
 const ALGORITHMS = ['HS256'] as const;
 
@@ -16,24 +22,6 @@ const isUserRole = (value: unknown): value is UserRole =>
 
 const isUuid = (value: unknown): value is string =>
   typeof value === 'string' && UUID.test(value);
-
-export interface AccessTokenClaims {
-  sub: string;
-  role: UserRole;
-  sid: string;
-}
-
-export interface RefreshTokenClaims {
-  sub: string;
-  sid: string;
-}
-
-export interface IssuedToken {
-  token: string;
-  expiresAt: Date;
-}
-
-export type SessionSubject = Pick<AuthenticatedUser, 'id' | 'sessionId'>;
 
 @Injectable()
 export class TokenService {

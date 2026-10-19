@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { OptionalAuth } from '../auth/decorators/optional-auth.decorator';
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';

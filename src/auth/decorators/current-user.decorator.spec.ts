@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 
-import type { AuthenticatedUser } from '../authenticated-user';
+import type { AuthenticatedUser } from '../types/authenticated-user';
 import { resolveCurrentUser } from './current-user.decorator';
 
 const USER: AuthenticatedUser = {

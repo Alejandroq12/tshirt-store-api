@@ -9,44 +9,29 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { type User, UserRole } from '@prisma/client';
 
-import type { EnvironmentVariables } from '../config/env.validation';
-import { type EmailMessage, MailService } from '../mail/mail.service';
-import { PrismaService } from '../prisma/prisma.service';
-import type { AuthenticatedUser } from './authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import { type EmailMessage, MailService } from '../../mail/mail.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import type { AuthenticatedUser } from '../types/authenticated-user';
 import {
   ChangePasswordRequest,
   LoginRequest,
   ResetPasswordRequest,
   SignUpRequest,
-} from './auth.dto';
-import { PasswordService } from './credentials/password.service';
-import { SecretTokenService } from './credentials/secret-token.service';
-import { TokenService } from './credentials/token.service';
+} from '../auth.dto';
+import { PasswordService } from './password.service';
+import { SecretTokenService } from './secret-token.service';
+import { TokenService } from './token.service';
+import type {
+  UserResponse,
+  AuthSessionResponse,
+  AccessTokenResponse,
+} from '../types/auth.types';
 
 type SessionUser = Pick<
   User,
   'id' | 'email' | 'firstName' | 'lastName' | 'role'
 >;
-
-export interface UserResponse {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: 'manager' | 'client';
-}
-
-export interface AuthSessionResponse {
-  accessToken: string;
-  refreshToken: string;
-  accessTokenExpiresAt: string;
-  user: UserResponse;
-}
-
-export interface AccessTokenResponse {
-  accessToken: string;
-  accessTokenExpiresAt: string;
-}
 
 const UNIT_MILLISECONDS = {
   ms: 1,

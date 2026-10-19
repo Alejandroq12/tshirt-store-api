@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma, UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
 import {
   PROBLEM_TYPE,
   type ProblemDetail,

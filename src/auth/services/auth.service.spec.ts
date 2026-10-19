@@ -2,13 +2,13 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '@prisma/client';
 
-import type { EnvironmentVariables } from '../config/env.validation';
-import type { MailService } from '../mail/mail.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import type { MailService } from '../../mail/mail.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
-import type { PasswordService } from './credentials/password.service';
-import type { SecretTokenService } from './credentials/secret-token.service';
-import type { TokenService } from './credentials/token.service';
+import type { PasswordService } from './password.service';
+import type { SecretTokenService } from './secret-token.service';
+import type { TokenService } from './token.service';
 
 const NOW = new Date('2026-08-28T12:00:00.000Z');
 const ACCESS_EXPIRY = new Date('2026-08-28T12:15:00.000Z');

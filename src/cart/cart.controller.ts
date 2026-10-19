@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import {
   CartItemCreateRequest,

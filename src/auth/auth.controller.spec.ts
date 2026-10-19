@@ -1,9 +1,9 @@
 import { GUARDS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { ThrottlerGuard } from '@nestjs/throttler';
 
-import type { AuthenticatedUser } from './authenticated-user';
+import type { AuthenticatedUser } from './types/authenticated-user';
 import { AuthController } from './auth.controller';
-import type { AuthService } from './auth.service';
+import type { AuthService } from './services/auth.service';
 import { IS_PUBLIC } from './decorators/public.decorator';
 
 type MethodName = keyof Pick<

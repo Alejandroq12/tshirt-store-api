@@ -2,7 +2,7 @@ import { AbilityBuilder } from '@casl/ability';
 import { createPrismaAbility } from '@casl/prisma';
 import { Injectable } from '@nestjs/common';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import type { AbilityRuleContributor, AppAbility } from './ability.types';
 
 @Injectable()

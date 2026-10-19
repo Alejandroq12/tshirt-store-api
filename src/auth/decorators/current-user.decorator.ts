@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 
-import type { AuthenticatedUser } from '../authenticated-user';
+import type { AuthenticatedUser } from '../types/authenticated-user';
 
 export interface CurrentUserOptions {
   optional?: boolean;

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Module, Post, RawBody } from '@nestjs/common';
 import { IsEmail, IsInt, Min } from 'class-validator';
 
-import type { AuthenticatedUser } from '../../src/auth/authenticated-user';
+import type { AuthenticatedUser } from '../../src/auth/types/authenticated-user';
 import { CurrentUser } from '../../src/auth/decorators/current-user.decorator';
 import { Public } from '../../src/auth/decorators/public.decorator';
 import { PasswordResetThrottle } from '../../src/security/password-reset-throttle.decorator';

@@ -1,6 +1,6 @@
 import { subject } from '@casl/ability';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { CaslAbilityFactory } from './casl-ability.factory';
 
 const MANAGER: AuthenticatedUser = {

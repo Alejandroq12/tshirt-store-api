@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { PaymentsService } from './payments.service';

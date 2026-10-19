@@ -6,7 +6,7 @@ import {
   PATH_METADATA,
 } from '@nestjs/common/constants';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { IS_PUBLIC } from '../auth/decorators/public.decorator';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
 import { AbilitiesGuard } from '../authorization/guards/abilities.guard';

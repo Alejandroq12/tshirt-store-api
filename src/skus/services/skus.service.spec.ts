@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
 import type { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';

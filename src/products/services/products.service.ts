@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type Product, UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
 import {

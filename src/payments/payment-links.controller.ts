@@ -1,6 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import { PaymentLinkCreateRequest } from './payments.dto';

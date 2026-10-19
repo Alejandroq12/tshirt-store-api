@@ -1,7 +1,7 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ValidationProblemException } from '../common/problems';
 import { IS_OPTIONAL_AUTH } from '../auth/decorators/optional-auth.decorator';
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
 import { ProductsController } from './products.controller';

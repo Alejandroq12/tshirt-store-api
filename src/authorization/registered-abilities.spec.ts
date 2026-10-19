@@ -2,7 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { CartModule } from '../cart/cart.module';
 import { ImagesModule } from '../images/images.module';
 import { NotificationsModule } from '../notifications/notifications.module';

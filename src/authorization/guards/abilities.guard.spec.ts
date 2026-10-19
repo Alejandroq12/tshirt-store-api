@@ -6,7 +6,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 
-import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { AuthenticatedUser } from '../../auth/types/authenticated-user';
 import { CaslAbilityFactory } from '../casl-ability.factory';
 import {
   REQUIRED_ABILITIES,
