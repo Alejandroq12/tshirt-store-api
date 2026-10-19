@@ -32,19 +32,23 @@ choice.
 ## The file order
 
 ```text
-1. prisma/schema.prisma          only if the model does not exist
-2. src/<feature>/<feature>.dto.ts        request classes and param classes
-3. src/<feature>/<feature>.service.ts    the logic, and the response interfaces
-4. src/<feature>/<feature>.controller.ts the route
-5. src/<feature>/<feature>.module.ts     wiring, and the CASL registrar
-6. src/<feature>/<feature>.service.spec.ts     written with step 3, not after
-7. src/<feature>/<feature>.controller.spec.ts
-8. test/<flow>.e2e-spec.ts       only for authentication, checkout, order history
+1. prisma/schema.prisma                              only if the model does not exist
+2. src/<feature>/<feature>.dto.ts                    request classes and param classes
+3. src/<feature>/types/<feature>.types.ts            the response interfaces
+4. src/<feature>/services/<feature>.service.ts       the logic
+5. src/<feature>/<feature>.controller.ts             the route
+6. src/<feature>/<feature>.module.ts                 wiring, and the CASL registrar
+7. src/<feature>/services/<feature>.service.spec.ts  written with step 4, not after
+8. src/<feature>/<feature>.controller.spec.ts
+9. test/<flow>.e2e-spec.ts                           only for authentication, checkout, order history
 ```
 
-Response types are exported from the **service**, not from the DTO file. See
-`SkuResponse` and `SkuDetailResponse` in `src/skus/skus.service.ts`. The DTO file
-holds only what comes in.
+Every slice has this shape: the module, the controllers and the DTO at the
+root, every `@Injectable()` provider in `services/`, the response interfaces
+in `types/`. Response types live in `types/<feature>.types.ts`, not in the DTO
+file and not in the service. See `SkuResponse` and `SkuDetailResponse` in
+`src/skus/types/skus.types.ts`. The DTO file holds only what comes in; the
+service imports its response types and builds them.
 
 ## The six rules that are not negotiable
 
@@ -69,13 +73,13 @@ holds only what comes in.
 | File                                                     | Read it when                                                        |
 | -------------------------------------------------------- | ------------------------------------------------------------------- |
 | [reference/dtos.md](reference/dtos.md)                   | writing step 2 — validation, optional properties, the money pattern |
-| [reference/errors.md](reference/errors.md)               | writing step 3 — mapping a branch to a status code                  |
-| [reference/authorization.md](reference/authorization.md) | writing steps 4 and 5 — decorators and the registrar                |
-| [reference/testing.md](reference/testing.md)             | writing steps 6 to 8 — what the specs must cover                    |
+| [reference/errors.md](reference/errors.md)               | writing step 4 — mapping a branch to a status code                  |
+| [reference/authorization.md](reference/authorization.md) | writing steps 5 and 6 — decorators and the registrar                |
+| [reference/testing.md](reference/testing.md)             | writing steps 7 to 9 — what the specs must cover                    |
 
 ## Before calling it done
 
-- `npm run typecheck`, then `npm test`, then `npm run test:e2e` if step 8
+- `npm run typecheck`, then `npm test`, then `npm run test:e2e` if step 9
   applies. `/verify` runs the whole gate.
 - Ask the `contract-auditor` subagent to check the operation against the
   contract. It finds the missing status code you did not think of.

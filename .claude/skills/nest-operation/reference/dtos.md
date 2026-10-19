@@ -1,7 +1,7 @@
 # DTOs and validation
 
 Request classes live in `src/<feature>/<feature>.dto.ts`. Response types do not
-— they are interfaces exported from the service.
+— they are interfaces in `src/<feature>/types/<feature>.types.ts`.
 
 The pipe is configured in `src/bootstrap.ts` with `whitelist: true`,
 `forbidNonWhitelisted: true`, `transform: true` and
