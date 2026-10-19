@@ -11,7 +11,7 @@ import { StockCycleService } from '../notifications/stock-cycle/stock-cycle.serv
 import { StockNotificationProducer } from '../notifications/delivery/stock-notification.producer';
 import { OrdersModule } from '../orders/orders.module';
 import { PaymentsModule } from '../payments/payments.module';
-import { StripeClient } from '../payments/stripe/stripe.client';
+import { StripeClient } from '../payments/services/stripe.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsModule } from '../products/products.module';
 import { S3StorageService } from '../storage/s3-storage.service';

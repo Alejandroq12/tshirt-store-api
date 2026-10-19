@@ -7,7 +7,7 @@ import type { EnvironmentVariables } from '../../config/env.validation';
 import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
 import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
 import { PrismaService } from '../../prisma/prisma.service';
-import { StripeClient } from '../stripe/stripe.client';
+import { StripeClient } from './stripe.client';
 
 const PAYMENT_LINK_SELECT = {
   id: true,

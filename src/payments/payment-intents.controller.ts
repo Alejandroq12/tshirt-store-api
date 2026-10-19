@@ -1,9 +1,10 @@
 import { Body, Controller, Post } from '@nestjs/common';
 
-import type { AuthenticatedUser } from '../../auth/authenticated-user';
-import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/authenticated-user';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PaymentIntentCreateRequest } from './payments.dto';
-import { PaymentIntentResponse, PaymentsService } from './payments.service';
+import { PaymentsService } from './services/payments.service';
+import type { PaymentIntentResponse } from './types/payments.types';
 
 @Controller('payment-intents')
 export class PaymentIntentsController {

@@ -19,8 +19,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import {
   PaymentIntentCreateRequest,
   PaymentLinkCreateRequest,
-} from './payments.dto';
-import { StripeClient } from '../stripe/stripe.client';
+} from '../payments.dto';
+import { StripeClient } from './stripe.client';
+import type {
+  PaymentLinkResponse,
+  PaymentIntentResponse,
+} from '../types/payments.types';
 
 const SKU_FOR_LINK_SELECT = {
   id: true,
@@ -53,22 +57,6 @@ const ORDER_FOR_INTENT_SELECT = {
     },
   },
 } satisfies Prisma.OrderSelect;
-
-export interface PaymentLinkResponse {
-  id: string;
-  skuId: string;
-  quantity: number;
-  url: string;
-  createdAt: string;
-}
-
-export interface PaymentIntentResponse {
-  id: string;
-  orderId: string;
-  clientSecret: string;
-  amount: string;
-  currency: string;
-}
 
 export interface InsufficientStockItem {
   skuId: string;

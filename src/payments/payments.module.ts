@@ -6,12 +6,12 @@ import { CaslAbilityFactory } from '../authorization/casl-ability.factory';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ReconciliationWorker } from '../notifications/reconciliation/reconciliation.worker';
 import { PrismaModule } from '../prisma/prisma.module';
-import { PaymentIntentsController } from './methods/payment-intents.controller';
-import { PaymentLinksController } from './methods/payment-links.controller';
-import { PaymentsService } from './methods/payments.service';
-import { StripeWebhookController } from './webhook/stripe-webhook.controller';
-import { StripeWebhookService } from './webhook/stripe-webhook.service';
-import { StripeClient } from './stripe/stripe.client';
+import { PaymentIntentsController } from './payment-intents.controller';
+import { PaymentLinksController } from './payment-links.controller';
+import { PaymentsService } from './services/payments.service';
+import { StripeWebhookController } from './stripe-webhook.controller';
+import { StripeWebhookService } from './services/stripe-webhook.service';
+import { StripeClient } from './services/stripe.client';
 
 @Injectable()
 class PaymentsAbilityRegistrar implements OnModuleInit {
