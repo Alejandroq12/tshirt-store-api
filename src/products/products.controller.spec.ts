@@ -6,7 +6,7 @@ import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
 import { ProductsController } from './products.controller';
 import { ProductStatus, UpdateProductRequest } from './products.dto';
-import type { ProductsService } from './products.service';
+import type { ProductsService } from './services/products.service';
 
 type MethodName = keyof Pick<
   ProductsController,

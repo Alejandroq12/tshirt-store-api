@@ -6,16 +6,22 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type Product, UserRole } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
-import type { EnvironmentVariables } from '../config/env.validation';
-import { PrismaService } from '../prisma/prisma.service';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateProductRequest,
   LikeUpdateRequest,
   ListProductsQuery,
   ProductStatus,
   UpdateProductRequest,
-} from './products.dto';
+} from '../products.dto';
+import type {
+  ProductResponse,
+  LikeStateResponse,
+  ProductPageResponse,
+  ProductDetailResponse,
+} from '../types/products.types';
 
 const PRODUCT_LIST_INCLUDE = {
   category: { select: { id: true, name: true, slug: true } },
@@ -63,74 +69,6 @@ type ProductCore = Pick<
   | 'createdAt'
   | 'updatedAt'
 >;
-
-export interface ProductResponse {
-  id: string;
-  categoryId: string;
-  name: string;
-  description: string | null;
-  status: ProductStatus;
-  retiredAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface LikeStateResponse {
-  productId: string;
-  liked: boolean;
-}
-
-interface CategoryResponse {
-  id: string;
-  name: string;
-  slug: string;
-}
-
-export interface ProductPageResponse {
-  items: Array<{
-    id: string;
-    category: CategoryResponse;
-    name: string;
-    description: string | null;
-    status: ProductStatus;
-    primaryImageUrl: string | null;
-    liked: boolean | null;
-  }>;
-  pagination: { limit: number; offset: number; total: number };
-}
-
-interface ImageAssetResponse {
-  id: string;
-  productId: string;
-  url: string;
-  skuIds: string[];
-  isProductPrimary: boolean;
-  primaryForSkuIds: string[];
-  createdAt: string;
-}
-
-interface CatalogSkuResponse {
-  id: string;
-  productId: string;
-  skuCode: string;
-  size: string;
-  color: string;
-  price: string;
-  currency: string;
-  stockQuantity: number;
-  imageIds: string[];
-  primaryImageId: string | null;
-  imageSource: 'sku' | 'product' | 'none';
-}
-
-export interface ProductDetailResponse extends ProductResponse {
-  category: CategoryResponse;
-  imageAssets: ImageAssetResponse[];
-  fallbackImageIds: string[];
-  primaryImageId: string | null;
-  skus: CatalogSkuResponse[];
-  liked: boolean | null;
-}
 
 const statusOf = (product: Pick<Product, 'isActive' | 'deletedAt'>) => {
   if (product.deletedAt) return ProductStatus.RETIRED;

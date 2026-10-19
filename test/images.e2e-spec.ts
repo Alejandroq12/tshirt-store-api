@@ -6,7 +6,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 
 import type { ImageAssetResponse } from '../src/images/types/images.types';
-import type { ProductDetailResponse } from '../src/products/products.service';
+import type { ProductDetailResponse } from '../src/products/types/products.types';
 import { ProductStatus } from '../src/products/products.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {

@@ -23,13 +23,13 @@ import {
   ProductIdParams,
   UpdateProductRequest,
 } from './products.dto';
-import {
+import { ProductsService } from './services/products.service';
+import type {
   LikeStateResponse,
   ProductDetailResponse,
   ProductPageResponse,
   ProductResponse,
-  ProductsService,
-} from './products.service';
+} from './types/products.types';
 
 @Controller('products')
 export class ProductsController {

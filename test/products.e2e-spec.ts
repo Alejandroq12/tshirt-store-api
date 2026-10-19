@@ -10,7 +10,7 @@ import type {
   ProductDetailResponse,
   ProductPageResponse,
   ProductResponse,
-} from '../src/products/products.service';
+} from '../src/products/types/products.types';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';

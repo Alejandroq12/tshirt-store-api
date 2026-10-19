@@ -2,10 +2,10 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
-import type { EnvironmentVariables } from '../config/env.validation';
-import type { PrismaService } from '../prisma/prisma.service';
-import { ProductStatus } from './products.dto';
+import type { AuthenticatedUser } from '../../auth/authenticated-user';
+import type { EnvironmentVariables } from '../../config/env.validation';
+import type { PrismaService } from '../../prisma/prisma.service';
+import { ProductStatus } from '../products.dto';
 import { ProductsService } from './products.service';
 
 const NOW = new Date('2026-08-28T12:00:00.000Z');
