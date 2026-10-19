@@ -1,9 +1,9 @@
 import { UnauthorizedException } from '@nestjs/common';
 
-import type { AuthenticatedUser } from '../authenticated-user';
+import type { SessionPrincipal } from '../types/session-principal';
 import { resolveCurrentUser } from './current-user.decorator';
 
-const USER: AuthenticatedUser = {
+const USER: SessionPrincipal = {
   id: '11111111-1111-4111-8111-111111111111',
   role: 'CLIENT',
   sessionId: '22222222-2222-4222-8222-222222222222',

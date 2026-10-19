@@ -1,0 +1,126 @@
+structure-check — label: layout-before — 2026-10-18 22:43 CST
+branch: refactor/slice-layout @ d1e498b (uncommitted changes)
+
+== rule: .claude/skills/structure-check/scripts/check.sh src (limit 10 files, 3 stems) ==
+ok      3 files  3 stems  src
+ok      8 files  3 stems  src/auth
+ok      6 files  3 stems  src/auth/credentials
+ok      4 files  3 stems  src/auth/decorators
+ok      2 files  1 stems  src/auth/guards
+mixed   6 files  5 stems  src/authorization
+ok      1 files  1 stems  src/authorization/decorators
+ok      2 files  1 stems  src/authorization/guards
+ok      6 files  1 stems  src/cart
+ok      0 files  0 stems  src/common
+ok      2 files  1 stems  src/common/filters
+ok      7 files  3 stems  src/common/problems
+ok      1 files  1 stems  src/common/validation
+mixed   8 files  5 stems  src/config
+ok      7 files  1 stems  src/images
+mixed   7 files  4 stems  src/logging
+ok      4 files  2 stems  src/mail
+ok      2 files  2 stems  src/notifications
+ok      4 files  1 stems  src/notifications/delivery
+ok      4 files  1 stems  src/notifications/reconciliation
+ok      2 files  1 stems  src/notifications/stock-cycle
+ok      8 files  2 stems  src/orders
+ok      1 files  1 stems  src/payments
+ok      6 files  3 stems  src/payments/methods
+ok      1 files  1 stems  src/payments/stripe
+ok      3 files  1 stems  src/payments/webhook
+ok      3 files  2 stems  src/prisma
+ok      6 files  1 stems  src/products
+ok      4 files  3 stems  src/security
+ok      6 files  1 stems  src/skus
+mixed   6 files  4 stems  src/storage
+structure: no folder under src holds more than 10 files across more than 3 stems
+exit: 0
+
+== proposal: docs/ai-module/evidence/structure-audit-layout.md ==
+kept        src/cart/cart.module.ts
+kept        src/cart/cart.controller.ts
+kept        src/cart/cart.controller.spec.ts
+kept        src/cart/cart.dto.ts
+UNRECORDED  src/cart/services/cart.service.ts is at src/cart/cart.service.ts
+UNRECORDED  src/cart/services/cart.service.spec.ts is at src/cart/cart.service.spec.ts
+MISSING     src/cart/types/cart.types.ts
+kept        src/images/images.module.ts
+kept        src/images/images.controller.ts
+kept        src/images/images.controller.spec.ts
+kept        src/images/images.dto.ts
+kept        src/images/images.dto.spec.ts
+UNRECORDED  src/images/services/images.service.ts is at src/images/images.service.ts
+UNRECORDED  src/images/services/images.service.spec.ts is at src/images/images.service.spec.ts
+MISSING     src/images/types/images.types.ts
+kept        src/skus/skus.module.ts
+kept        src/skus/skus.controller.ts
+kept        src/skus/skus.controller.spec.ts
+kept        src/skus/skus.dto.ts
+UNRECORDED  src/skus/services/skus.service.ts is at src/skus/skus.service.ts
+UNRECORDED  src/skus/services/skus.service.spec.ts is at src/skus/skus.service.spec.ts
+MISSING     src/skus/types/skus.types.ts
+kept        src/orders/orders.module.ts
+kept        src/orders/orders.controller.ts
+kept        src/orders/orders.controller.spec.ts
+kept        src/orders/my-orders.controller.ts
+kept        src/orders/my-orders.controller.spec.ts
+kept        src/orders/orders.dto.ts
+UNRECORDED  src/orders/services/orders.service.ts is at src/orders/orders.service.ts
+UNRECORDED  src/orders/services/orders.service.spec.ts is at src/orders/orders.service.spec.ts
+MISSING     src/orders/types/orders.types.ts
+kept        src/products/products.module.ts
+kept        src/products/products.controller.ts
+kept        src/products/products.controller.spec.ts
+kept        src/products/products.dto.ts
+UNRECORDED  src/products/services/products.service.ts is at src/products/products.service.ts
+UNRECORDED  src/products/services/products.service.spec.ts is at src/products/products.service.spec.ts
+MISSING     src/products/types/products.types.ts
+kept        src/payments/payments.module.ts
+UNRECORDED  src/payments/payment-intents.controller.ts is at src/payments/methods/payment-intents.controller.ts
+UNRECORDED  src/payments/payment-links.controller.ts is at src/payments/methods/payment-links.controller.ts
+UNRECORDED  src/payments/stripe-webhook.controller.ts is at src/payments/webhook/stripe-webhook.controller.ts
+UNRECORDED  src/payments/payments.controllers.spec.ts is at src/payments/methods/payments.controllers.spec.ts
+UNRECORDED  src/payments/payments.dto.ts is at src/payments/methods/payments.dto.ts
+UNRECORDED  src/payments/services/payments.service.ts is at src/payments/methods/payments.service.ts
+UNRECORDED  src/payments/services/payments.service.spec.ts is at src/payments/methods/payments.service.spec.ts
+UNRECORDED  src/payments/services/stripe-webhook.service.ts is at src/payments/webhook/stripe-webhook.service.ts
+UNRECORDED  src/payments/services/stripe-webhook.service.spec.ts is at src/payments/webhook/stripe-webhook.service.spec.ts
+UNRECORDED  src/payments/services/stripe.client.ts is at src/payments/stripe/stripe.client.ts
+MISSING     src/payments/types/payments.types.ts
+kept        src/auth/auth.module.ts
+kept        src/auth/auth.controller.ts
+kept        src/auth/auth.controller.spec.ts
+kept        src/auth/auth.dto.ts
+kept        src/auth/index.ts
+kept        src/auth/decorators/current-user.decorator.ts
+kept        src/auth/decorators/current-user.decorator.spec.ts
+kept        src/auth/decorators/optional-auth.decorator.ts
+kept        src/auth/decorators/public.decorator.ts
+kept        src/auth/guards/jwt-auth.guard.ts
+kept        src/auth/guards/jwt-auth.guard.spec.ts
+UNRECORDED  src/auth/services/auth.service.ts is at src/auth/auth.service.ts
+UNRECORDED  src/auth/services/auth.service.spec.ts is at src/auth/auth.service.spec.ts
+UNRECORDED  src/auth/services/password.service.ts is at src/auth/credentials/password.service.ts
+UNRECORDED  src/auth/services/password.service.spec.ts is at src/auth/credentials/password.service.spec.ts
+UNRECORDED  src/auth/services/secret-token.service.ts is at src/auth/credentials/secret-token.service.ts
+UNRECORDED  src/auth/services/secret-token.service.spec.ts is at src/auth/credentials/secret-token.service.spec.ts
+UNRECORDED  src/auth/services/token.service.ts is at src/auth/credentials/token.service.ts
+UNRECORDED  src/auth/services/token.service.spec.ts is at src/auth/credentials/token.service.spec.ts
+MISSING     src/auth/types/auth.types.ts
+MISSING     src/auth/types/session-principal.ts
+MISSING     src/auth/types/token.types.ts
+proposal: 35 kept, 0 recorded deviations, 28 unrecorded, 9 missing
+exit: 1
+
+== gate ==
+npm run typecheck  exit: 0   clean
+npm run lint       exit: 0   clean
+npm run build      exit: 0   clean
+npm run test:ci    exit: 0   Test Suites: 43 passed, 43 total
+                             Tests:       506 passed, 506 total
+
+== verdict ==
+rule      exit: 0
+proposal  exit: 1
+gate      exit: 0
+FAIL  proposal: unrecorded deviations, missing files, or no usable report

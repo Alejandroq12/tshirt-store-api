@@ -5,11 +5,11 @@ import { JwtModule } from '@nestjs/jwt';
 import { MailModule } from '../mail/mail.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
+import { AuthService } from './services/auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { PasswordService } from './credentials/password.service';
-import { SecretTokenService } from './credentials/secret-token.service';
-import { TokenService } from './credentials/token.service';
+import { PasswordService } from './services/password.service';
+import { SecretTokenService } from './services/secret-token.service';
+import { TokenService } from './services/token.service';
 
 @Module({
   imports: [JwtModule.register({}), PrismaModule, MailModule],

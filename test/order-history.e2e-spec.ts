@@ -11,7 +11,7 @@ import {
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import type { OrderPageResponse } from '../src/orders/orders.service';
+import type { OrderPageResponse } from '../src/orders/types/orders.types';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';

@@ -1,13 +1,13 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { IS_OPTIONAL_AUTH } from '../auth/decorators/optional-auth.decorator';
 import { REQUIRED_ABILITIES } from '../authorization/decorators/check-abilities.decorator';
 import { AbilitiesGuard } from '../authorization/guards/abilities.guard';
 import { ValidationProblemException } from '../common/problems';
 import { SkusController } from './skus.controller';
 import { UpdateSkuRequest } from './skus.dto';
-import type { SkusService } from './skus.service';
+import type { SkusService } from './services/skus.service';
 
 type MethodName = keyof Pick<
   SkusController,
@@ -44,7 +44,7 @@ describe('SkusController', () => {
     update: jest.fn(),
   };
   const controller = new SkusController(skus as unknown as SkusService);
-  const manager: AuthenticatedUser = {
+  const manager: SessionPrincipal = {
     id: '11111111-1111-4111-8111-111111111111',
     role: 'MANAGER',
     sessionId: '22222222-2222-4222-8222-222222222222',

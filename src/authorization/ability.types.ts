@@ -19,7 +19,7 @@ import type {
   User,
 } from '@prisma/client';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 
 export type AppAction =
   'manage' | 'create' | 'read' | 'list' | 'update' | 'delete';
@@ -48,6 +48,6 @@ export type AppSubjects =
 export type AppAbility = PrismaAbility<[AppAction, AppSubjects]>;
 
 export type AbilityRuleContributor = (
-  user: AuthenticatedUser,
+  user: SessionPrincipal,
   builder: AbilityBuilder<AppAbility>,
 ) => void;

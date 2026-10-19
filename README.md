@@ -76,7 +76,7 @@ src/skus/              product variants
 src/images/            S3 image upload and assignments
 src/cart/              client cart
 src/orders/            snapshots, history, and status changes
-src/payments/          methods/, webhook/, stripe/ — links, intents, settlement, SDK
+src/payments/          Payment Links, Payment Intents, and the Stripe webhook
 src/notifications/     stock-cycle/, delivery/, reconciliation/
 src/authorization/     CASL permissions
 src/common/            validation and Problem Details errors
@@ -85,6 +85,8 @@ src/prisma,mail,storage/ database, SMTP, and S3 adapters
 test/                   end-to-end tests and fixtures
 ```
 
+Each feature slice has the same shape: the module, its controllers and its DTO
+at the root, providers in `services/`, response interfaces in `types/`.
 Controllers handle HTTP. DTOs validate input. Services hold business rules and
 transactions. Guards handle authentication and permissions. Feature modules
 register their CASL rules. Services use Prisma directly, so there is no extra
@@ -307,22 +309,29 @@ See also [`docs/architecture.md`](docs/architecture.md),
 ## Reorganising a folder
 
 A folder fails the structure rule when it has more than 10 files and more than
-3 name stems at once.
+3 name stems at once. A feature slice keeps one shape: the module, the
+controllers and the DTO at the root, providers in `services/`, response
+interfaces in `types/`.
 
-1. `/structure-audit before`: diagnosis and proposal; changes nothing.
-2. `/structure-check before`: baseline, rule red and gate green.
-3. Move one folder with `git mv` and fix its imports. If you depart from the
+1. `/structure-audit <name>`: diagnosis and proposal; changes nothing. Use a
+   new label per reorganisation so earlier evidence stays as it was.
+2. Point the check at that report: the default in
+   `.claude/skills/structure-check/scripts/run.sh` and `proposal.sh`.
+3. `/structure-check <name>-before`: baseline; the proposal is red, the gate
+   green.
+4. Move one folder with `git mv` and fix its imports. If you depart from the
    proposal, add one line to the audit's `deviations` block.
-4. `/structure-check`: if it passes, commit.
-5. Repeat steps 3–4 for each folder.
-6. Update the layout trees in `README.md` and `CLAUDE.md`.
-7. `/structure-check after`: final verdict.
-8. `npm run test:e2e`: append its tail to the evidence file.
-9. Update the write-up and open the PR.
+5. `/structure-check`: the gate must pass; the proposal turns green with the
+   last move. Commit.
+6. Repeat steps 4–5 for each folder.
+7. Update the layout trees in `README.md` and `CLAUDE.md`.
+8. `/structure-check <name>-after`: final verdict.
+9. `npm run test:e2e`: append its tail to the evidence file.
+10. Update the write-up and open the PR.
 
 Example move:
 
 ```bash
-mkdir -p src/payments/stripe
-git mv src/payments/stripe.client.ts src/payments/stripe/stripe.client.ts
+mkdir -p src/products/services
+git mv src/products/products.service.ts src/products/services/products.service.ts
 ```

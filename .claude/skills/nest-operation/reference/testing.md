@@ -17,7 +17,7 @@ because the specs truncate tables between cases.
 ## Unit specs construct the service directly
 
 No `Test.createTestingModule` for a service. Instantiate it with hand-built
-fakes, the way `src/skus/skus.service.spec.ts` does:
+fakes, the way `src/skus/services/skus.service.spec.ts` does:
 
 ```ts
 const skuCreate = jest.fn();

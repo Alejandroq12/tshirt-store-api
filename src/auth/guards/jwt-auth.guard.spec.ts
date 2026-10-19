@@ -2,10 +2,10 @@ import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 
-import type { AuthService } from '../auth.service';
+import type { AuthService } from '../services/auth.service';
 import { IS_OPTIONAL_AUTH } from '../decorators/optional-auth.decorator';
 import { IS_PUBLIC } from '../decorators/public.decorator';
-import type { TokenService } from '../credentials/token.service';
+import type { TokenService } from '../services/token.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 const CLAIMS = {
