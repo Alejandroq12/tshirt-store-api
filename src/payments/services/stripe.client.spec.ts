@@ -71,4 +71,65 @@ describe('StripeClient', () => {
       ).toThrow(Stripe.errors.StripeSignatureVerificationError);
     });
   });
+
+  describe('createPaymentIntent', () => {
+    it('forwards the order idempotency key to Stripe', async () => {
+      const intent = { id: 'pi_1', client_secret: 'pi_1_secret' };
+      const create = jest
+        .spyOn(
+          Object.getPrototypeOf(
+            signer.paymentIntents,
+          ) as Stripe.PaymentIntentsResource,
+          'create',
+        )
+        .mockResolvedValue(intent as Stripe.Response<Stripe.PaymentIntent>);
+      const params: Stripe.PaymentIntentCreateParams = {
+        amount: 3998,
+        currency: 'usd',
+        metadata: { orderId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' },
+      };
+
+      await expect(
+        clientWith().createPaymentIntent(params, {
+          idempotencyKey: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        }),
+      ).resolves.toBe(intent);
+      expect(create).toHaveBeenCalledWith(params, {
+        idempotencyKey: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      });
+    });
+  });
+
+  describe('createPaymentLink', () => {
+    it('creates the Payment Link with the given parameters', async () => {
+      const link = { id: 'plink_1', url: 'https://buy.stripe.com/test' };
+      const create = jest
+        .spyOn(
+          Object.getPrototypeOf(
+            signer.paymentLinks,
+          ) as Stripe.PaymentLinksResource,
+          'create',
+        )
+        .mockResolvedValue(link as Stripe.Response<Stripe.PaymentLink>);
+      const params: Stripe.PaymentLinkCreateParams = {
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: { name: 'Classic Crew' },
+              unit_amount: 1999,
+            },
+            quantity: 2,
+          },
+        ],
+        metadata: {
+          skuId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          quantity: '2',
+        },
+      };
+
+      await expect(clientWith().createPaymentLink(params)).resolves.toBe(link);
+      expect(create).toHaveBeenCalledWith(params);
+    });
+  });
 });
