@@ -351,6 +351,38 @@ describe('PaymentsService', () => {
     expect(createPaymentIntent).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['an order that already has an intent', { stripePaymentIntentId: 'pi_1' }],
+    ['a cancelled order', { status: OrderStatus.CANCELLED }],
+  ])('carries no stock items on the 409 for %s', async (_name, override) => {
+    orderFindFirst.mockResolvedValue(
+      orderFixture({
+        ...override,
+        items: [
+          {
+            skuId: SKU_ID,
+            quantity: 2,
+            sku: {
+              stockQuantity: 0,
+              product: { isActive: true, deletedAt: null },
+            },
+          },
+        ],
+      }),
+    );
+
+    const error = await service
+      .createIntent({ orderId: ORDER_ID }, CLIENT)
+      .catch((failure: unknown) => failure);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getStatus()).toBe(409);
+    expect((error as ConflictException).getResponse()).not.toHaveProperty(
+      'items',
+    );
+    expect(createPaymentIntent).not.toHaveBeenCalled();
+  });
+
   it('creates one intent from the frozen total with order idempotency', async () => {
     const response = await service.createIntent({ orderId: ORDER_ID }, CLIENT);
 
