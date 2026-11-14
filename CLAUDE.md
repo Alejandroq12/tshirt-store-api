@@ -175,9 +175,11 @@ specs live in `test/` as `*.e2e-spec.ts` with their own Jest config.
 ## Conventions that are not negotiable
 
 - **Every error is `application/problem+json`.** `ProblemExceptionFilter`
-  catches everything. A response with status ≥ 500 carries no `detail` — the
-  filter discards the original and rebuilds a bare 500, logging the scrubbed
-  stack. Never add a `detail` to a server error.
+  catches everything. A response with status ≥ 500 carries no `detail`: the
+  filter drops the message of a plain `HttpException` at 500 or above, keeping
+  its status (the payment routes' 502), rebuilds anything else — a
+  `ProblemException` at 500 or above included — as a bare 500, and logs the
+  scrubbed stack. Never add a `detail` to a server error.
 - **Money is a string,** `decimal(10,2)`, matching
   `^(0|[1-9]\d{0,7})\.\d{2}$`. Never a JavaScript number, at any layer.
 - **Validation returns 422,** not 400. `ValidationPipe` runs with
