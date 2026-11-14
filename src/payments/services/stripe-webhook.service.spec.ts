@@ -282,6 +282,20 @@ describe('StripeWebhookService', () => {
     process.mockRestore();
   });
 
+  it('acknowledges a stored event even when business processing fails', async () => {
+    const process = jest
+      .spyOn(service, 'process')
+      .mockRejectedValue(new Error('Payment product is not active'));
+
+    await expect(
+      service.receive(Buffer.from('{}'), 'signature'),
+    ).resolves.toBeUndefined();
+
+    expect(eventCreate).toHaveBeenCalledTimes(1);
+    expect(process).toHaveBeenCalledWith(STORED_EVENT_ID);
+    process.mockRestore();
+  });
+
   it('locks products and SKUs in ascending order and commits payment atomically', async () => {
     lockedCartItems = [
       { id: 'cart-a', skuId: SKU_A_ID, quantity: 5 },
