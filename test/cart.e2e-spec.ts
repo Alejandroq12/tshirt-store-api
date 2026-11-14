@@ -190,4 +190,55 @@ describe('Cart (e2e)', () => {
     const cart = (await getCart(ownerToken).expect(200)).body as CartResponse;
     expect(cart).toMatchObject({ items: [], subtotalAmount: '0.00' });
   });
+
+  it('prices the cart at the current SKU price and accepts a quantity above stock', async () => {
+    const client = await createClient(prisma);
+    const token = await login(client);
+    const { sku: scarce } = await createProductWithSku(prisma, {
+      isActive: true,
+      price: '19.99',
+      stockQuantity: 1,
+    });
+    const { sku: plenty } = await createProductWithSku(prisma, {
+      isActive: true,
+      price: '5.00',
+      stockQuantity: 10,
+    });
+
+    const created = await addItem(token, scarce.id, 3).expect(201);
+    const scarceItem = created.body as CartItemResponse;
+    expect(scarceItem).toMatchObject({
+      skuId: scarce.id,
+      quantity: 3,
+      unitPrice: '19.99',
+      lineTotal: '59.97',
+    });
+    await addItem(token, plenty.id, 1).expect(201);
+    const updated = await updateItem(token, scarceItem.id, 4).expect(200);
+    expect(updated.body).toMatchObject({ quantity: 4, lineTotal: '79.96' });
+
+    await prisma.productSku.update({
+      where: { id: scarce.id },
+      data: { price: '24.50' },
+    });
+
+    const cart = (await getCart(token).expect(200)).body as CartResponse;
+    const lineFor = (skuId: string) =>
+      cart.items.find((item) => item.skuId === skuId);
+    expect(cart.items).toHaveLength(2);
+    expect(lineFor(scarce.id)).toMatchObject({
+      quantity: 4,
+      unitPrice: '24.50',
+      lineTotal: '98.00',
+    });
+    expect(lineFor(plenty.id)).toMatchObject({
+      quantity: 1,
+      unitPrice: '5.00',
+      lineTotal: '5.00',
+    });
+    expect(cart.subtotalAmount).toBe('103.00');
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: scarce.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 1 });
+  });
 });
