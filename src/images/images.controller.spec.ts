@@ -59,6 +59,20 @@ describe('ImagesController', () => {
     );
   });
 
+  it('delegates a file at the size limit to the service', async () => {
+    await controller.uploadProductImage(
+      { productId: PRODUCT_ID },
+      {},
+      { ...file, size: IMAGE_MAX_BYTES },
+    );
+
+    expect(upload).toHaveBeenCalledWith(
+      PRODUCT_ID,
+      {},
+      { body: file.buffer, contentType: 'image/png' },
+    );
+  });
+
   it('rejects a missing file as validation failure', () => {
     expect(() =>
       controller.uploadProductImage({ productId: PRODUCT_ID }, {}),

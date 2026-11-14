@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import type { ProductImage } from '@prisma/client';
 
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -74,6 +74,10 @@ describe('ImagesService', () => {
     );
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('does not upload when the product is missing', async () => {
     productFindUnique.mockResolvedValue(null);
 
@@ -101,6 +105,32 @@ describe('ImagesService', () => {
       ),
     ).rejects.toThrow(NotFoundException);
     expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it('counts only the supplied SKUs that belong to the uploading product', async () => {
+    await service.upload(
+      PRODUCT_ID,
+      { skuIds: [FIRST_SKU_ID, SECOND_SKU_ID] },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expect(skuCount).toHaveBeenCalledWith({
+      where: {
+        productId: PRODUCT_ID,
+        id: { in: [FIRST_SKU_ID, SECOND_SKU_ID] },
+      },
+    });
+  });
+
+  it('skips the SKU ownership check for a fallback upload', async () => {
+    await service.upload(
+      PRODUCT_ID,
+      { skuIds: [] },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expect(skuCount).not.toHaveBeenCalled();
+    expect(storageUpload).toHaveBeenCalledTimes(1);
   });
 
   it('creates the first fallback image as the product primary', async () => {
@@ -167,6 +197,32 @@ describe('ImagesService', () => {
     expect(response.isProductPrimary).toBe(true);
   });
 
+  it('makes the first variant image primary for every supplied SKU', async () => {
+    const response = await service.upload(
+      PRODUCT_ID,
+      { skuIds: [FIRST_SKU_ID, SECOND_SKU_ID] },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expect(assignmentUpdateMany).not.toHaveBeenCalled();
+    expect(imageCreate).toHaveBeenCalledWith({
+      data: {
+        productId: PRODUCT_ID,
+        url: STORED.url,
+        s3Key: STORED.key,
+        isFallback: false,
+        isProductPrimary: false,
+        skuAssignments: {
+          create: [
+            { skuId: FIRST_SKU_ID, isPrimary: true },
+            { skuId: SECOND_SKU_ID, isPrimary: true },
+          ],
+        },
+      },
+    });
+    expect(response.primaryForSkuIds).toEqual([FIRST_SKU_ID, SECOND_SKU_ID]);
+  });
+
   it('creates only variant assignments and fills missing SKU primaries', async () => {
     assignmentFindMany.mockResolvedValue([{ skuId: FIRST_SKU_ID }]);
 
@@ -228,6 +284,22 @@ describe('ImagesService', () => {
           body: Buffer.from('image'),
           contentType: 'image/png',
         },
+      ),
+    ).rejects.toBe(failure);
+    expect(storageRemove).toHaveBeenCalledWith(STORED.key);
+  });
+
+  it('keeps the persistence error when removing the uploaded object fails', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const failure = new Error('database failed');
+    transaction.mockRejectedValueOnce(failure);
+    storageRemove.mockRejectedValueOnce(new Error('storage failed'));
+
+    await expect(
+      service.upload(
+        PRODUCT_ID,
+        {},
+        { body: Buffer.from('image'), contentType: 'image/png' },
       ),
     ).rejects.toBe(failure);
     expect(storageRemove).toHaveBeenCalledWith(STORED.key);
