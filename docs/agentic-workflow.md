@@ -17,7 +17,7 @@ CLAUDE.md              the working agreement, loaded into every session
   settings.local.json  personal overrides, git-ignored
   commands/            seven slash commands
   agents/              four read-only review subagents
-  skills/              two procedural skills
+  skills/              four procedural skills
   hooks/               four scripts on lifecycle events
   statusline.sh        branch, tree state, contract progress
 .mcp.json              the project's MCP server
@@ -105,7 +105,11 @@ code is a worse auditor.
 conventions, status-code mapping, CASL registrar pattern and test expectations
 for adding one operation; detail sits in `reference/` files that load only when
 that step is reached. `prisma-migration` holds the database procedure, including
-the two things that must not be broken.
+the two things that must not be broken. `structure-audit` lists the folders the
+structure rule does not mark ok, proposes how to regroup each one or records why
+it stays, and writes that as evidence; `structure-check` runs the folder rule,
+the check that the proposed tree exists, and the gate, and combines them into
+one verdict.
 
 **Hooks** cover the lifecycle. Beyond the two refusals above, `SessionStart`
 prints where the work stands — branch, tree state, operations implemented out of
