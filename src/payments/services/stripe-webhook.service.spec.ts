@@ -384,6 +384,35 @@ describe('StripeWebhookService', () => {
     expect(enqueueNotifications).toHaveBeenCalledWith(['notification-id']);
   });
 
+  it('applies nothing again when a different event repeats an already-paid intent', async () => {
+    const repeatedIntentEvent = {
+      ...paymentIntentEvent,
+      id: 'evt_intent_repeat',
+    } as unknown as Stripe.PaymentIntentSucceededEvent;
+    eventFindUnique.mockResolvedValue(storedEvent(repeatedIntentEvent));
+    orderFindUnique.mockResolvedValue({
+      ...intentOrder,
+      status: OrderStatus.PAID,
+    });
+    lockedCartItems = [{ id: 'cart-a', skuId: SKU_A_ID, quantity: 5 }];
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(cartItemUpdate).not.toHaveBeenCalled();
+    expect(cartItemDeleteMany).not.toHaveBeenCalled();
+    expect(eventUpdate).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID },
+      data: {
+        orderId: ORDER_ID,
+        processedAt: expect.any(Date) as Date,
+        errorMessage: null,
+      },
+    });
+    expect(eventUpdateOutside).not.toHaveBeenCalled();
+  });
+
   it('refuses a succeeded intent that is not the one stored on the order', async () => {
     orderFindUnique.mockResolvedValue({
       ...intentOrder,
