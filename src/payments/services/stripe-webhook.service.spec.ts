@@ -49,6 +49,14 @@ const checkoutEvent = {
   },
 } as unknown as Stripe.CheckoutSessionCompletedEvent;
 
+const checkoutEventWith = (
+  session: Record<string, unknown>,
+): Stripe.CheckoutSessionCompletedEvent =>
+  ({
+    ...checkoutEvent,
+    data: { object: { ...checkoutEvent.data.object, ...session } },
+  }) as unknown as Stripe.CheckoutSessionCompletedEvent;
+
 const inventory = [
   {
     id: SKU_A_ID,
@@ -753,6 +761,104 @@ describe('StripeWebhookService', () => {
     );
     expect(orderCreate).not.toHaveBeenCalled();
     expect(eventUpdateOutside).toHaveBeenCalled();
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['an unpaid session', { payment_status: 'unpaid' }],
+    ['a session without a Payment Link', { payment_link: null }],
+    ['a session without a total', { amount_total: null }],
+    ['a zero total', { amount_total: 0 }],
+  ])('creates no order for %s', async (_name, session) => {
+    eventFindUnique.mockResolvedValue(storedEvent(checkoutEventWith(session)));
+    orderFindUnique.mockResolvedValue(null);
+    skuFindMany.mockResolvedValue([inventory[0]]);
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Checkout Session is missing payment data',
+    );
+
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Checkout Session is missing payment data' },
+    });
+  });
+
+  it('matches the buyer by the session email when Stripe sends no customer details', async () => {
+    eventFindUnique.mockResolvedValue(
+      storedEvent(
+        checkoutEventWith({
+          customer_details: null,
+          customer_email: 'Client@Example.com',
+          payment_link: { id: 'plink_1' },
+        }),
+      ),
+    );
+    orderFindUnique.mockResolvedValue(null);
+    skuFindMany.mockResolvedValue([inventory[0]]);
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+
+    expect(paymentLinkFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { stripePaymentLinkId: 'plink_1' } }),
+    );
+    expect(userFindFirst).toHaveBeenCalledWith({
+      where: { email: 'client@example.com', role: 'CLIENT' },
+      select: { id: true },
+    });
+    const [{ data }] = orderCreate.mock.calls[0] as [
+      { data: { clientId: string; paymentLinkId: string } },
+    ];
+    expect(data).toMatchObject({
+      clientId: CLIENT_ID,
+      paymentLinkId: LINK_ID,
+      stripeCheckoutSessionId: 'cs_1',
+    });
+  });
+
+  it('returns the existing order for a replayed session without charging stock again', async () => {
+    eventFindUnique.mockResolvedValue(storedEvent(checkoutEvent));
+    orderFindUnique.mockResolvedValue({ id: ORDER_ID });
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+
+    expect(orderFindUnique).toHaveBeenCalledWith({
+      where: { stripeCheckoutSessionId: 'cs_1' },
+      select: { id: true },
+    });
+    expect(paymentLinkFindUnique).not.toHaveBeenCalled();
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(eventUpdate).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID },
+      data: {
+        orderId: ORDER_ID,
+        processedAt: expect.any(Date) as Date,
+        errorMessage: null,
+      },
+    });
+  });
+
+  it('refuses a total that does not divide into a whole unit price', async () => {
+    eventFindUnique.mockResolvedValue(
+      storedEvent(checkoutEventWith({ amount_total: 3999 })),
+    );
+    orderFindUnique.mockResolvedValue(null);
+    skuFindMany.mockResolvedValue([inventory[0]]);
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Checkout Session total is not a whole unit price',
+    );
+
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: {
+        errorMessage: 'Checkout Session total is not a whole unit price',
+      },
+    });
   });
 
   it('settles a succeeded Payment Intent that matches no local order by id or by stored intent', async () => {
