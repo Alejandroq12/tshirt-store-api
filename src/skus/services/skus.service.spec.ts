@@ -27,6 +27,12 @@ const MANAGER: SessionPrincipal = {
   sessionId: '22222222-2222-4222-8222-222222222222',
 };
 
+const prismaError = (code: string): Prisma.PrismaClientKnownRequestError =>
+  new Prisma.PrismaClientKnownRequestError('database constraint failed', {
+    code,
+    clientVersion: '6.19.3',
+  });
+
 describe('SkusService', () => {
   const productFindUnique = jest.fn();
   const skuCreate = jest.fn();
@@ -119,6 +125,23 @@ describe('SkusService', () => {
       }),
     ).rejects.toThrow(NotFoundException);
     expect(skuCreate).not.toHaveBeenCalled();
+  });
+
+  it('propagates a duplicate skuCode or size/color on create for the global 409 mapping', async () => {
+    const duplicate = prismaError('P2002');
+    skuCreate.mockRejectedValue(duplicate);
+
+    await expect(
+      service.create({
+        productId: SKU.productId,
+        skuCode: SKU.skuCode,
+        size: SKU.size,
+        color: SKU.color,
+        price: '19.90',
+        stockQuantity: 4,
+      }),
+    ).rejects.toBe(duplicate);
+    expect(skuCreate).toHaveBeenCalledTimes(1);
   });
 
   it('resolves product fallback images for an anonymous caller', async () => {
@@ -257,6 +280,16 @@ describe('SkusService', () => {
       stockQuantity: 0,
     });
     expect(response).not.toHaveProperty('status');
+  });
+
+  it('propagates a duplicate skuCode or size/color on update for the global 409 mapping', async () => {
+    const duplicate = prismaError('P2002');
+    skuUpdate.mockRejectedValue(duplicate);
+
+    await expect(
+      service.update(SKU.id, { skuCode: 'CREW-BLUE-L' }),
+    ).rejects.toBe(duplicate);
+    expect(skuUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('locks the product and evaluates the aggregate stock change in one transaction', async () => {
