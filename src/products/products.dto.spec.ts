@@ -1,9 +1,20 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 
-import { LikeUpdateRequest, ListProductsQuery } from './products.dto';
+import {
+  CreateProductRequest,
+  LikeUpdateRequest,
+  ListProductsQuery,
+  ProductIdParams,
+  ProductStatus,
+  UpdateProductRequest,
+} from './products.dto';
 
 type RequestClass = new () => object;
+
+const CATEGORY_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const PRODUCT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CREATE = { categoryId: CATEGORY_ID, name: 'Classic Crew' };
 
 const failedProperties = (cls: RequestClass, value: object): string[] =>
   validateSync(plainToInstance(cls, value)).map(({ property }) => property);
@@ -55,4 +66,57 @@ describe('LikeUpdateRequest', () => {
       expect(failedProperties(LikeUpdateRequest, value)).toEqual(['liked']);
     },
   );
+});
+
+describe('CreateProductRequest', () => {
+  it.each([
+    { ...CREATE, name: 'x'.repeat(200) },
+    { ...CREATE, description: null },
+    CREATE,
+  ])('accepts a valid product: %p', (value) => {
+    expect(failedProperties(CreateProductRequest, value)).toEqual([]);
+  });
+
+  it.each([
+    [{ ...CREATE, name: 'x'.repeat(201) }, 'name'],
+    [{ ...CREATE, name: '' }, 'name'],
+    [{ ...CREATE, categoryId: 'not-a-uuid' }, 'categoryId'],
+    [{ ...CREATE, description: 5 }, 'description'],
+  ])('rejects an invalid product: %p', (value, property) => {
+    expect(failedProperties(CreateProductRequest, value)).toEqual([property]);
+  });
+});
+
+describe('UpdateProductRequest', () => {
+  it('accepts a null description, which clears it', () => {
+    expect(
+      failedProperties(UpdateProductRequest, { description: null }),
+    ).toEqual([]);
+  });
+
+  it.each(Object.values(ProductStatus))('accepts the %s status', (status) => {
+    expect(failedProperties(UpdateProductRequest, { status })).toEqual([]);
+  });
+
+  // Only description is nullable; a null on any other field is not a skip.
+  it.each([
+    [{ categoryId: null }, 'categoryId'],
+    [{ name: null }, 'name'],
+    [{ status: null }, 'status'],
+    [{ status: 'ACTIVE' }, 'status'],
+    [{ status: 'deleted' }, 'status'],
+  ])('rejects an invalid update: %p', (value, property) => {
+    expect(failedProperties(UpdateProductRequest, value)).toEqual([property]);
+  });
+});
+
+describe('ProductIdParams', () => {
+  it('requires a UUID', () => {
+    expect(
+      failedProperties(ProductIdParams, { productId: PRODUCT_ID }),
+    ).toEqual([]);
+    expect(
+      failedProperties(ProductIdParams, { productId: 'not-a-uuid' }),
+    ).toEqual(['productId']);
+  });
 });
