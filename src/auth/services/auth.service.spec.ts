@@ -1,4 +1,8 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '@prisma/client';
 
@@ -476,6 +480,88 @@ describe('AuthService', () => {
         },
       ),
     ).rejects.toThrow(UnauthorizedException);
+  });
+
+  describe('when the email cannot be sent', () => {
+    beforeEach(() => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('still records the reset token on forgot-password', async () => {
+      userFindUnique.mockResolvedValue({ id: USER.id, email: USER.email });
+      send.mockRejectedValue(new Error('mail provider unavailable'));
+
+      await expect(
+        serviceWith().forgotPassword(USER.email),
+      ).resolves.toBeUndefined();
+      expect(resetCreate).toHaveBeenCalledWith({
+        data: {
+          userId: USER.id,
+          tokenHash: 'hash:reset-token',
+          expiresAt: new Date('2026-08-28T13:00:00.000Z'),
+        },
+      });
+    });
+
+    it('keeps a committed reset when the rejection is not an Error', async () => {
+      resetFindUnique.mockResolvedValue({
+        id: '33333333-3333-4333-8333-333333333333',
+        userId: USER.id,
+        expiresAt: new Date('2026-08-28T13:00:00.000Z'),
+        usedAt: null,
+        user: { email: USER.email },
+      });
+      send.mockRejectedValue('mail provider unavailable');
+
+      await expect(
+        serviceWith().resetPassword({
+          resetToken: 'reset-token',
+          newPassword: 'replacement-password',
+        }),
+      ).resolves.toBeUndefined();
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: USER.id },
+        data: { passwordHash: 'new-hash' },
+      });
+      expect(sessionUpdateMany).toHaveBeenCalledWith({
+        where: { userId: USER.id, revokedAt: null },
+        data: { revokedAt: NOW },
+      });
+    });
+
+    it('keeps a committed password change', async () => {
+      userFindUnique.mockResolvedValue({
+        email: USER.email,
+        passwordHash: USER.passwordHash,
+      });
+      send.mockRejectedValue(new Error('mail provider unavailable'));
+
+      await expect(
+        serviceWith().changePassword(
+          {
+            id: USER.id,
+            role: UserRole.CLIENT,
+            sessionId: '22222222-2222-4222-8222-222222222222',
+          },
+          {
+            currentPassword: 'example-password',
+            newPassword: 'replacement-password',
+          },
+        ),
+      ).resolves.toBeUndefined();
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: USER.id },
+        data: { passwordHash: 'new-hash' },
+      });
+      expect(sessionUpdateMany).toHaveBeenCalledWith({
+        where: { userId: USER.id, revokedAt: null },
+        data: { revokedAt: NOW },
+      });
+    });
   });
 
   it('accepts only a live session whose stored role still matches', async () => {
