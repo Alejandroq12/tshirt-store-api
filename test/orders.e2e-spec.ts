@@ -11,7 +11,10 @@ import {
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import type { OrderResponse } from '../src/orders/types/orders.types';
+import type {
+  OrderPageResponse,
+  OrderResponse,
+} from '../src/orders/types/orders.types';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';
@@ -317,6 +320,150 @@ describe('Orders (e2e)', () => {
     ).resolves.toMatchObject({
       status: OrderStatus.PENDING,
       cancelledAt: null,
+    });
+  });
+
+  const listOrders = (token: string) =>
+    request(app.getHttpServer())
+      .get('/v1/orders')
+      .set('Authorization', `Bearer ${token}`);
+
+  const readOrder = (token: string, orderId: string) =>
+    request(app.getHttpServer())
+      .get(`/v1/orders/${orderId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+  it("lists every client's orders newest first for a manager only", async () => {
+    const clientA = await createClient(prisma);
+    const clientB = await createClient(prisma);
+    const manager = await createManager(prisma);
+    const clientToken = await login(clientA);
+    const managerToken = await login(manager);
+    const { product, sku } = await createProductWithSku(prisma);
+    const tie = new Date('2026-09-03T10:00:00.000Z');
+    const oldest = await createOrder({
+      clientId: clientA.id,
+      product,
+      sku,
+      status: OrderStatus.PAID,
+      totalAmount: '19.99',
+      createdAt: new Date('2026-09-01T10:00:00.000Z'),
+    });
+    const pending = await createOrder({
+      clientId: clientB.id,
+      product,
+      sku,
+      status: OrderStatus.PENDING,
+      totalAmount: '25.00',
+      createdAt: new Date('2026-09-02T10:00:00.000Z'),
+    });
+    const tiedA = await createOrder({
+      clientId: clientA.id,
+      product,
+      sku,
+      status: OrderStatus.PROCESSING,
+      totalAmount: '19.99',
+      createdAt: tie,
+    });
+    const tiedB = await createOrder({
+      clientId: clientB.id,
+      product,
+      sku,
+      status: OrderStatus.SHIPPED,
+      totalAmount: '25.00',
+      createdAt: tie,
+    });
+    // PostgreSQL compares uuid values byte by byte, which is the order of
+    // their lowercase hex strings, so the id DESC tie-break can be derived here.
+    const newestFirst = [
+      ...[tiedA.id, tiedB.id].sort().reverse(),
+      pending.id,
+      oldest.id,
+    ];
+
+    const response = await listOrders(managerToken)
+      .query({ limit: 10, offset: 0 })
+      .expect(200);
+    const body = response.body as OrderPageResponse;
+
+    expect(Object.keys(body).sort()).toEqual(['items', 'pagination']);
+    expect(body.items.map(({ id }) => id)).toEqual(newestFirst);
+    expect(new Set(body.items.map(({ clientId }) => clientId))).toEqual(
+      new Set([clientA.id, clientB.id]),
+    );
+    expect(body.pagination).toEqual({ limit: 10, offset: 0, total: 4 });
+
+    const page = await listOrders(managerToken)
+      .query({ limit: 1, offset: 2 })
+      .expect(200);
+    expect((page.body as OrderPageResponse).items.map(({ id }) => id)).toEqual([
+      pending.id,
+    ]);
+    expect((page.body as OrderPageResponse).pagination).toEqual({
+      limit: 1,
+      offset: 2,
+      total: 4,
+    });
+
+    await request(app.getHttpServer())
+      .get('/v1/orders?limit=10&offset=0')
+      .expect(401);
+    await listOrders(clientToken).query({ limit: 10, offset: 0 }).expect(403);
+
+    const missingOffset = await listOrders(managerToken)
+      .query({ limit: 10 })
+      .expect(422);
+    expect(missingOffset.headers['content-type']).toMatch(PROBLEM_JSON);
+    const fields = (
+      missingOffset.body as { errors: { field: string }[] }
+    ).errors.map(({ field }) => field);
+    expect([...new Set(fields)]).toEqual(['offset']);
+  });
+
+  it('lets the owner and a manager read an order and rejects a malformed id', async () => {
+    const owner = await createClient(prisma);
+    const manager = await createManager(prisma);
+    const ownerToken = await login(owner);
+    const managerToken = await login(manager);
+    const { product, sku } = await createProductWithSku(prisma);
+    const createdAt = new Date('2026-09-01T10:00:00.000Z');
+    const order = await createOrder({
+      clientId: owner.id,
+      product,
+      sku,
+      status: OrderStatus.SHIPPED,
+      totalAmount: '19.99',
+      createdAt,
+    });
+
+    for (const token of [ownerToken, managerToken]) {
+      const response = await readOrder(token, order.id).expect(200);
+
+      expect(response.body).toMatchObject({
+        id: order.id,
+        clientId: owner.id,
+        status: 'shipped',
+        paymentMethod: 'payment_intent',
+        totalAmount: '19.99',
+        paidAt: createdAt.toISOString(),
+        cancelledAt: null,
+        items: [
+          {
+            productId: product.id,
+            skuId: sku.id,
+            quantity: 1,
+            unitPrice: '19.99',
+            lineTotal: '19.99',
+          },
+        ],
+      });
+    }
+
+    const malformed = await readOrder(ownerToken, 'not-a-uuid').expect(422);
+    expect(malformed.headers['content-type']).toMatch(PROBLEM_JSON);
+    expect(malformed.body).toMatchObject({
+      status: 422,
+      errors: [{ field: 'orderId' }],
     });
   });
 });
