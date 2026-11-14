@@ -583,6 +583,28 @@ describe('StripeWebhookService', () => {
     },
   );
 
+  it.each<[string, typeof inventory]>([
+    ['a SKU missing from the inventory read', [inventory[0]]],
+    [
+      'a SKU that now belongs to another product',
+      [inventory[0], { ...inventory[1], productId: PRODUCT_A_ID }],
+    ],
+  ])('decrements nothing for %s', async (_name, skus) => {
+    skuFindMany.mockResolvedValue(skus);
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Payment SKU was not found',
+    );
+
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Payment SKU was not found' },
+    });
+  });
+
   it.each([
     ['keeps a positive remainder', 5, 'update', 3],
     ['deletes an exact remainder', 2, 'delete', 0],
