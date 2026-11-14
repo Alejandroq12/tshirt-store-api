@@ -234,6 +234,34 @@ describe('StripeWebhookService', () => {
     expect(eventCreate).not.toHaveBeenCalled();
   });
 
+  it.each<[string, Buffer | undefined]>([
+    ['an empty body', Buffer.alloc(0)],
+    ['a missing body', undefined],
+  ])('returns 400 for %s without verifying or storing', async (_name, body) => {
+    await expect(service.receive(body, 'signature')).rejects.toThrow(
+      BadRequestException,
+    );
+
+    expect(constructEvent).not.toHaveBeenCalled();
+    expect(eventCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for a verified event of an unsupported type without storing it', async () => {
+    constructEvent.mockReturnValue({
+      id: 'evt_customer',
+      type: 'customer.created',
+      created: EVENT_TIME,
+      data: { object: {} },
+    });
+
+    await expect(
+      service.receive(Buffer.from('{}'), 'signature'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(eventFindUniqueOutside).not.toHaveBeenCalled();
+    expect(eventCreate).not.toHaveBeenCalled();
+  });
+
   it('acknowledges an existing event without applying it again', async () => {
     eventFindUniqueOutside.mockResolvedValue({ id: STORED_EVENT_ID });
     const process = jest.spyOn(service, 'process');
@@ -278,6 +306,19 @@ describe('StripeWebhookService', () => {
     await expect(
       service.receive(Buffer.from('{}'), 'signature'),
     ).resolves.toBeUndefined();
+    expect(process).not.toHaveBeenCalled();
+    process.mockRestore();
+  });
+
+  it('does not acknowledge an event it could not store', async () => {
+    const failure = new Error('database unavailable');
+    eventCreate.mockRejectedValue(failure);
+    const process = jest.spyOn(service, 'process');
+
+    await expect(service.receive(Buffer.from('{}'), 'signature')).rejects.toBe(
+      failure,
+    );
+
     expect(process).not.toHaveBeenCalled();
     process.mockRestore();
   });
