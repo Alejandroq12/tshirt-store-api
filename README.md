@@ -224,7 +224,7 @@ Commands:
 npm run db:migrate         # create or apply a development migration
 npm run db:migrate:deploy  # apply committed migrations
 npm run db:migrate:test    # apply migrations using .env.test
-npm run db:seed            # manager, 10 categories, 15 Products, 38 SKUs
+npm run db:seed            # manager, 10 categories, 15 Products, 37 SKUs
 npm run db:studio          # inspect local data
 ```
 
