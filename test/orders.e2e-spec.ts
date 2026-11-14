@@ -466,4 +466,57 @@ describe('Orders (e2e)', () => {
       errors: [{ field: 'orderId' }],
     });
   });
+
+  const checkout = (token: string) =>
+    request(app.getHttpServer())
+      .post('/v1/orders')
+      .set('Authorization', `Bearer ${token}`);
+
+  it('returns the typed 409 problems for an empty cart and a second pending order', async () => {
+    const client = await createClient(prisma);
+    const token = await login(client);
+    const { sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      price: '19.99',
+      stockQuantity: 10,
+    });
+
+    const emptyCart = await checkout(token).expect(409);
+    expect(emptyCart.headers['content-type']).toMatch(PROBLEM_JSON);
+    expect(emptyCart.body).toEqual({
+      type: 'urn:tshirt-store:problem:empty-cart',
+      title: 'Cart is empty',
+      status: 409,
+      instance: '/v1/orders',
+    });
+
+    await request(app.getHttpServer())
+      .post('/v1/me/cart/items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ skuId: sku.id, quantity: 2 })
+      .expect(201);
+
+    const created = await checkout(token).expect(201);
+    const order = created.body as OrderResponse;
+    expect(created.headers.location).toBe(`/v1/orders/${order.id}`);
+    expect(order).toMatchObject({
+      clientId: client.id,
+      status: 'pending',
+      totalAmount: '39.98',
+      paidAt: null,
+      cancelledAt: null,
+    });
+
+    // The cart keeps its items after checkout, so this request reaches the
+    // pending-order check rather than the empty-cart one.
+    const second = await checkout(token).expect(409);
+    expect(second.headers['content-type']).toMatch(PROBLEM_JSON);
+    expect(second.body).toEqual({
+      type: 'urn:tshirt-store:problem:pending-order-exists',
+      title: 'Pending order already exists',
+      status: 409,
+      instance: '/v1/orders',
+    });
+    await expect(prisma.order.count()).resolves.toBe(1);
+  });
 });
