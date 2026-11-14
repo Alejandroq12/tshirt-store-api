@@ -13,7 +13,10 @@ const AMOUNT_PATTERN = /^(0|[1-9]\d{0,7})\.\d{2}$/;
 
 const ISO_DATE_TIME = { strict: true, strictSeparator: true } as const;
 
-const REQUIRES_TIME_OF_DAY = /T/;
+// IsISO8601 also admits week, ordinal, basic and hour-only forms that
+// Date cannot parse; format: date-time needs seconds and an offset.
+const RFC_3339_DATE_TIME =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 export enum OrderStatusFilter {
   PENDING = 'pending',
@@ -49,15 +52,15 @@ export class ListOrdersQuery {
 export class ListMyOrdersQuery extends ListOrdersQuery {
   @IsOptional()
   @IsISO8601(ISO_DATE_TIME)
-  @Matches(REQUIRES_TIME_OF_DAY, {
-    message: '$property must be a date-time, not a date.',
+  @Matches(RFC_3339_DATE_TIME, {
+    message: '$property must be an RFC 3339 date-time with a time-zone offset.',
   })
   from?: string;
 
   @IsOptional()
   @IsISO8601(ISO_DATE_TIME)
-  @Matches(REQUIRES_TIME_OF_DAY, {
-    message: '$property must be a date-time, not a date.',
+  @Matches(RFC_3339_DATE_TIME, {
+    message: '$property must be an RFC 3339 date-time with a time-zone offset.',
   })
   to?: string;
 
