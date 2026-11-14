@@ -231,6 +231,40 @@ describe('SkusService', () => {
     expect(response.imageSource).toBe('sku');
   });
 
+  it('prefers SKU-specific images over product fallback images', async () => {
+    const fallback = {
+      id: 'fallback-image',
+      productId: SKU.productId,
+      url: 'https://cdn.example.com/fallback.webp',
+      s3Key: 'fallback.webp',
+      isFallback: true,
+      isProductPrimary: true,
+      createdAt: NOW,
+      skuAssignments: [],
+    };
+    const image = {
+      id: 'sku-image',
+      productId: SKU.productId,
+      url: 'https://cdn.example.com/sku.webp',
+      s3Key: 'sku.webp',
+      isFallback: false,
+      isProductPrimary: false,
+      createdAt: NOW,
+      skuAssignments: [{ skuId: SKU.id, isPrimary: true }],
+    };
+    skuFindFirst.mockResolvedValue({
+      ...SKU,
+      product: { images: [fallback] },
+      imageAssignments: [{ imageId: image.id, isPrimary: true, image }],
+    });
+
+    const response = await service.get(SKU.id);
+
+    expect(response.images.map(({ id }) => id)).toEqual([image.id]);
+    expect(response.primaryImageId).toBe(image.id);
+    expect(response.imageSource).toBe('sku');
+  });
+
   it('returns no image source when no images are available', async () => {
     skuFindFirst.mockResolvedValue({
       ...SKU,
@@ -280,6 +314,24 @@ describe('SkusService', () => {
       stockQuantity: 0,
     });
     expect(response).not.toHaveProperty('status');
+  });
+
+  it('updates only the price as a decimal string and leaves other fields untouched', async () => {
+    skuUpdate.mockResolvedValue({ ...SKU, price: new Prisma.Decimal('21.00') });
+
+    const response = await service.update(SKU.id, { price: '21.00' });
+
+    expect(skuUpdate).toHaveBeenCalledWith({
+      where: { id: SKU.id },
+      data: {
+        skuCode: undefined,
+        size: undefined,
+        color: undefined,
+        price: '21.00',
+        stockQuantity: undefined,
+      },
+    });
+    expect(response.price).toBe('21.00');
   });
 
   it('propagates a duplicate skuCode or size/color on update for the global 409 mapping', async () => {
