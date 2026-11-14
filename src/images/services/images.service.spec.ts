@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import type { ProductImage } from '@prisma/client';
 
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -72,6 +72,10 @@ describe('ImagesService', () => {
           createdAt: NOW,
         } as ProductImage),
     );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('does not upload when the product is missing', async () => {
@@ -280,6 +284,22 @@ describe('ImagesService', () => {
           body: Buffer.from('image'),
           contentType: 'image/png',
         },
+      ),
+    ).rejects.toBe(failure);
+    expect(storageRemove).toHaveBeenCalledWith(STORED.key);
+  });
+
+  it('keeps the persistence error when removing the uploaded object fails', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const failure = new Error('database failed');
+    transaction.mockRejectedValueOnce(failure);
+    storageRemove.mockRejectedValueOnce(new Error('storage failed'));
+
+    await expect(
+      service.upload(
+        PRODUCT_ID,
+        {},
+        { body: Buffer.from('image'), contentType: 'image/png' },
       ),
     ).rejects.toBe(failure);
     expect(storageRemove).toHaveBeenCalledWith(STORED.key);
