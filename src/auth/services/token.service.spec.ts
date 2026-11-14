@@ -124,6 +124,35 @@ describe('TokenService', () => {
     });
   });
 
+  describe('expiry', () => {
+    const lapsed = () => {
+      const now = Math.floor(Date.now() / 1000);
+      return { iat: now - 120, exp: now - 60 };
+    };
+
+    it('refuses an expired access token', async () => {
+      const token = sign(
+        { sub: USER.id, role: USER.role, sid: USER.sessionId, ...lapsed() },
+        ENVIRONMENT.JWT_ACCESS_SECRET!,
+      );
+
+      await expect(tokens.verifyAccessToken(token)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('refuses an expired refresh token', async () => {
+      const token = sign(
+        { sub: USER.id, sid: USER.sessionId, ...lapsed() },
+        ENVIRONMENT.JWT_REFRESH_SECRET!,
+      );
+
+      await expect(tokens.verifyRefreshToken(token)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+  });
+
   describe('claims a correctly signed token cannot smuggle in', () => {
     const signed = (
       claims: object,
@@ -199,6 +228,19 @@ describe('TokenService', () => {
           expiresIn: '30d',
         },
       );
+
+      await expect(tokens.verifyRefreshToken(refresh)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it.each([
+      ['no session id', { sub: USER.id }],
+      ['a session id that is not a UUID', { sub: USER.id, sid: 'nope' }],
+    ])('refuses a refresh token with %s', async (_label, claims) => {
+      const refresh = sign(claims, ENVIRONMENT.JWT_REFRESH_SECRET!, {
+        expiresIn: '30d',
+      });
 
       await expect(tokens.verifyRefreshToken(refresh)).rejects.toThrow(
         UnauthorizedException,

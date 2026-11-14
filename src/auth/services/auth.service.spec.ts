@@ -1,6 +1,10 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { MailService } from '../../mail/mail.service';
@@ -170,6 +174,23 @@ describe('AuthService', () => {
     });
   });
 
+  it('propagates a duplicate email constraint for the global 409 mapping', async () => {
+    const duplicate = new Prisma.PrismaClientKnownRequestError(
+      'database constraint failed',
+      { code: 'P2002', clientVersion: '6.19.3' },
+    );
+    userCreate.mockRejectedValue(duplicate);
+
+    await expect(
+      serviceWith().signUp({
+        email: USER.email,
+        password: 'example-password',
+        firstName: 'Ana',
+        lastName: 'Rivera',
+      }),
+    ).rejects.toBe(duplicate);
+  });
+
   it('logs a manager in and stores a new session', async () => {
     userFindUnique.mockResolvedValue({ ...USER, role: UserRole.MANAGER });
 
@@ -241,13 +262,28 @@ describe('AuthService', () => {
     expect(response).not.toHaveProperty('refreshToken');
     expect(sessionCreate).not.toHaveBeenCalled();
     const refreshQuery = (
-      sessionFindFirst.mock.calls as Array<
-        [{ where: { refreshTokenHash: string; revokedAt: null } }]
-      >
+      sessionFindFirst.mock.calls as Array<[{ where: unknown }]>
     )[0][0];
-    expect(refreshQuery.where).toMatchObject({
+    expect(refreshQuery.where).toEqual({
+      id: '22222222-2222-4222-8222-222222222222',
+      userId: USER.id,
       refreshTokenHash: 'hash:refresh-token',
       revokedAt: null,
+      expiresAt: { gt: NOW },
+    });
+  });
+
+  it('issues the refreshed access token from the stored role and the token session', async () => {
+    sessionFindFirst.mockResolvedValue({
+      user: { id: USER.id, role: UserRole.MANAGER },
+    });
+
+    await serviceWith().refreshAccessToken('refresh-token');
+
+    expect(issueAccessToken).toHaveBeenCalledWith({
+      id: USER.id,
+      role: UserRole.MANAGER,
+      sessionId: '22222222-2222-4222-8222-222222222222',
     });
   });
 
@@ -257,6 +293,16 @@ describe('AuthService', () => {
     await expect(
       serviceWith().refreshAccessToken('refresh-token'),
     ).rejects.toThrow(UnauthorizedException);
+    expect(issueAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unverifiable refresh token before looking up any session', async () => {
+    verifyRefreshToken.mockRejectedValue(new UnauthorizedException());
+
+    await expect(
+      serviceWith().refreshAccessToken('refresh-token'),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(sessionFindFirst).not.toHaveBeenCalled();
     expect(issueAccessToken).not.toHaveBeenCalled();
   });
 
@@ -362,6 +408,25 @@ describe('AuthService', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it('rejects a reset token that expires at this very instant without claiming it', async () => {
+    resetFindUnique.mockResolvedValue({
+      id: 'token-id',
+      userId: USER.id,
+      expiresAt: new Date('2026-08-28T12:00:00.000Z'),
+      usedAt: null,
+      user: { email: USER.email },
+    });
+
+    await expect(
+      serviceWith().resetPassword({
+        resetToken: 'reset-token',
+        newPassword: 'replacement-password',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(resetUpdateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
   it('rejects a reset token another request claimed first', async () => {
     resetFindUnique.mockResolvedValue({
       id: 'token-id',
@@ -378,6 +443,9 @@ describe('AuthService', () => {
         newPassword: 'replacement-password',
       }),
     ).rejects.toThrow(BadRequestException);
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(sessionUpdateMany).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('changes a password, revokes every session, and sends the email', async () => {
@@ -453,6 +521,88 @@ describe('AuthService', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
+  describe('when the email cannot be sent', () => {
+    beforeEach(() => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('still records the reset token on forgot-password', async () => {
+      userFindUnique.mockResolvedValue({ id: USER.id, email: USER.email });
+      send.mockRejectedValue(new Error('mail provider unavailable'));
+
+      await expect(
+        serviceWith().forgotPassword(USER.email),
+      ).resolves.toBeUndefined();
+      expect(resetCreate).toHaveBeenCalledWith({
+        data: {
+          userId: USER.id,
+          tokenHash: 'hash:reset-token',
+          expiresAt: new Date('2026-08-28T13:00:00.000Z'),
+        },
+      });
+    });
+
+    it('keeps a committed reset when the rejection is not an Error', async () => {
+      resetFindUnique.mockResolvedValue({
+        id: '33333333-3333-4333-8333-333333333333',
+        userId: USER.id,
+        expiresAt: new Date('2026-08-28T13:00:00.000Z'),
+        usedAt: null,
+        user: { email: USER.email },
+      });
+      send.mockRejectedValue('mail provider unavailable');
+
+      await expect(
+        serviceWith().resetPassword({
+          resetToken: 'reset-token',
+          newPassword: 'replacement-password',
+        }),
+      ).resolves.toBeUndefined();
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: USER.id },
+        data: { passwordHash: 'new-hash' },
+      });
+      expect(sessionUpdateMany).toHaveBeenCalledWith({
+        where: { userId: USER.id, revokedAt: null },
+        data: { revokedAt: NOW },
+      });
+    });
+
+    it('keeps a committed password change', async () => {
+      userFindUnique.mockResolvedValue({
+        email: USER.email,
+        passwordHash: USER.passwordHash,
+      });
+      send.mockRejectedValue(new Error('mail provider unavailable'));
+
+      await expect(
+        serviceWith().changePassword(
+          {
+            id: USER.id,
+            role: UserRole.CLIENT,
+            sessionId: '22222222-2222-4222-8222-222222222222',
+          },
+          {
+            currentPassword: 'example-password',
+            newPassword: 'replacement-password',
+          },
+        ),
+      ).resolves.toBeUndefined();
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: USER.id },
+        data: { passwordHash: 'new-hash' },
+      });
+      expect(sessionUpdateMany).toHaveBeenCalledWith({
+        where: { userId: USER.id, revokedAt: null },
+        data: { revokedAt: NOW },
+      });
+    });
+  });
+
   it('accepts only a live session whose stored role still matches', async () => {
     sessionFindFirst.mockResolvedValue({ user: { role: UserRole.CLIENT } });
     const user = {
@@ -468,6 +618,26 @@ describe('AuthService', () => {
 
     sessionFindFirst.mockResolvedValue(null);
     await expect(serviceWith().isSessionActive(user)).resolves.toBe(false);
+  });
+
+  it('looks up an active session by id, owner, revocation and expiry', async () => {
+    sessionFindFirst.mockResolvedValue({ user: { role: UserRole.CLIENT } });
+
+    await serviceWith().isSessionActive({
+      id: USER.id,
+      role: UserRole.CLIENT,
+      sessionId: '22222222-2222-4222-8222-222222222222',
+    });
+
+    const activeQuery = (
+      sessionFindFirst.mock.calls as Array<[{ where: unknown }]>
+    )[0][0];
+    expect(activeQuery.where).toEqual({
+      id: '22222222-2222-4222-8222-222222222222',
+      userId: USER.id,
+      revokedAt: null,
+      expiresAt: { gt: NOW },
+    });
   });
 
   it('rejects an invalid reset-token duration', () => {
