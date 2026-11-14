@@ -459,12 +459,27 @@ describe('ProductsService', () => {
     await expect(
       service.update(PRODUCT.id, { status: ProductStatus.INACTIVE }),
     ).rejects.toThrow(ConflictException);
+    expect(productUpdateMany).not.toHaveBeenCalled();
 
     const response = await service.update(PRODUCT.id, {
       name: 'Edited after retirement',
     });
     expect(response.status).toBe(ProductStatus.RETIRED);
     expect(response.retiredAt).toBe(NOW.toISOString());
+  });
+
+  it('refuses reactivation of a retired product before any image lookup', async () => {
+    productFindUnique.mockResolvedValue({
+      ...PRODUCT,
+      isActive: false,
+      deletedAt: NOW,
+    });
+
+    await expect(
+      service.update(PRODUCT.id, { status: ProductStatus.ACTIVE }),
+    ).rejects.toThrow(ConflictException);
+    expect(imageFindFirst).not.toHaveBeenCalled();
+    expect(productUpdateMany).not.toHaveBeenCalled();
   });
 
   it('keeps the original timestamp when a retired product is retired again', async () => {
