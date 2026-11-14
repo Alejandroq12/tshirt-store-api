@@ -79,10 +79,11 @@ src/orders/            snapshots, history, and status changes
 src/payments/          Payment Links, Payment Intents, and the Stripe webhook
 src/notifications/     stock-cycle/, delivery/, reconciliation/
 src/authorization/     CASL permissions
+src/security/          password-reset rate limit
 src/common/            validation and Problem Details errors
 src/config,logging/    validated configuration and safe logs
 src/prisma,mail,storage/ database, SMTP, and S3 adapters
-test/                   end-to-end tests and fixtures
+test/                  end-to-end tests and fixtures
 ```
 
 Each feature slice has the same shape: the module, its controllers and its DTO
