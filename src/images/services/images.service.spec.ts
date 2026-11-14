@@ -103,6 +103,32 @@ describe('ImagesService', () => {
     expect(storageUpload).not.toHaveBeenCalled();
   });
 
+  it('counts only the supplied SKUs that belong to the uploading product', async () => {
+    await service.upload(
+      PRODUCT_ID,
+      { skuIds: [FIRST_SKU_ID, SECOND_SKU_ID] },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expect(skuCount).toHaveBeenCalledWith({
+      where: {
+        productId: PRODUCT_ID,
+        id: { in: [FIRST_SKU_ID, SECOND_SKU_ID] },
+      },
+    });
+  });
+
+  it('skips the SKU ownership check for a fallback upload', async () => {
+    await service.upload(
+      PRODUCT_ID,
+      { skuIds: [] },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expect(skuCount).not.toHaveBeenCalled();
+    expect(storageUpload).toHaveBeenCalledTimes(1);
+  });
+
   it('creates the first fallback image as the product primary', async () => {
     const response = await service.upload(
       PRODUCT_ID,
