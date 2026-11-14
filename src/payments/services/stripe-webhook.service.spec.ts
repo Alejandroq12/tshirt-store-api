@@ -49,6 +49,14 @@ const checkoutEvent = {
   },
 } as unknown as Stripe.CheckoutSessionCompletedEvent;
 
+const checkoutEventWith = (
+  session: Record<string, unknown>,
+): Stripe.CheckoutSessionCompletedEvent =>
+  ({
+    ...checkoutEvent,
+    data: { object: { ...checkoutEvent.data.object, ...session } },
+  }) as unknown as Stripe.CheckoutSessionCompletedEvent;
+
 const inventory = [
   {
     id: SKU_A_ID,
@@ -234,6 +242,34 @@ describe('StripeWebhookService', () => {
     expect(eventCreate).not.toHaveBeenCalled();
   });
 
+  it.each<[string, Buffer | undefined]>([
+    ['an empty body', Buffer.alloc(0)],
+    ['a missing body', undefined],
+  ])('returns 400 for %s without verifying or storing', async (_name, body) => {
+    await expect(service.receive(body, 'signature')).rejects.toThrow(
+      BadRequestException,
+    );
+
+    expect(constructEvent).not.toHaveBeenCalled();
+    expect(eventCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for a verified event of an unsupported type without storing it', async () => {
+    constructEvent.mockReturnValue({
+      id: 'evt_customer',
+      type: 'customer.created',
+      created: EVENT_TIME,
+      data: { object: {} },
+    });
+
+    await expect(
+      service.receive(Buffer.from('{}'), 'signature'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(eventFindUniqueOutside).not.toHaveBeenCalled();
+    expect(eventCreate).not.toHaveBeenCalled();
+  });
+
   it('acknowledges an existing event without applying it again', async () => {
     eventFindUniqueOutside.mockResolvedValue({ id: STORED_EVENT_ID });
     const process = jest.spyOn(service, 'process');
@@ -278,6 +314,19 @@ describe('StripeWebhookService', () => {
     await expect(
       service.receive(Buffer.from('{}'), 'signature'),
     ).resolves.toBeUndefined();
+    expect(process).not.toHaveBeenCalled();
+    process.mockRestore();
+  });
+
+  it('does not acknowledge an event it could not store', async () => {
+    const failure = new Error('database unavailable');
+    eventCreate.mockRejectedValue(failure);
+    const process = jest.spyOn(service, 'process');
+
+    await expect(service.receive(Buffer.from('{}'), 'signature')).rejects.toBe(
+      failure,
+    );
+
     expect(process).not.toHaveBeenCalled();
     process.mockRestore();
   });
@@ -429,6 +478,75 @@ describe('StripeWebhookService', () => {
     expect(eventUpdateOutside).toHaveBeenCalled();
   });
 
+  it.each<[string, Stripe.Event, unknown, string]>([
+    [
+      'an intent whose status is not succeeded',
+      {
+        ...paymentIntentEvent,
+        data: {
+          object: { ...paymentIntentEvent.data.object, status: 'processing' },
+        },
+      } as unknown as Stripe.PaymentIntentSucceededEvent,
+      intentOrder,
+      'Payment Intent event is missing payment data',
+    ],
+    [
+      'a paid order that holds a different intent',
+      paymentIntentEvent,
+      {
+        ...intentOrder,
+        status: OrderStatus.PAID,
+        stripePaymentIntentId: 'pi_other',
+      },
+      'Payment Intent order cannot be paid',
+    ],
+    [
+      'a cancelled order',
+      paymentIntentEvent,
+      { ...intentOrder, status: OrderStatus.CANCELLED },
+      'Payment Intent order cannot be paid',
+    ],
+  ])(
+    'leaves the event pending for %s',
+    async (_name, event, order, message) => {
+      eventFindUnique.mockResolvedValue(storedEvent(event));
+      orderFindUnique.mockResolvedValue(order);
+
+      await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(message);
+
+      expect(skuUpdate).not.toHaveBeenCalled();
+      expect(orderUpdateMany).not.toHaveBeenCalled();
+      expect(eventUpdate).not.toHaveBeenCalled();
+      expect(eventUpdateOutside).toHaveBeenCalledWith({
+        where: { id: STORED_EVENT_ID, processedAt: null },
+        data: { errorMessage: message },
+      });
+    },
+  );
+
+  it('rolls back when the order changed between read and update', async () => {
+    orderUpdateMany.mockResolvedValue({ count: 0 });
+    lockedCartItems = [{ id: 'cart-a', skuId: SKU_A_ID, quantity: 5 }];
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Payment Intent order changed concurrently',
+    );
+
+    expect(
+      queryRaw.mock.calls.some(([query]: [Prisma.Sql]) =>
+        query.strings.join('').includes('FROM cart_items'),
+      ),
+    ).toBe(false);
+    expect(cartItemUpdate).not.toHaveBeenCalled();
+    expect(cartItemDeleteMany).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Payment Intent order changed concurrently' },
+    });
+    expect(enqueueNotifications).not.toHaveBeenCalled();
+  });
+
   it('decrements nothing and leaves the event pending when any line lacks stock', async () => {
     skuFindMany.mockResolvedValue([
       inventory[0],
@@ -472,6 +590,28 @@ describe('StripeWebhookService', () => {
       });
     },
   );
+
+  it.each<[string, typeof inventory]>([
+    ['a SKU missing from the inventory read', [inventory[0]]],
+    [
+      'a SKU that now belongs to another product',
+      [inventory[0], { ...inventory[1], productId: PRODUCT_A_ID }],
+    ],
+  ])('decrements nothing for %s', async (_name, skus) => {
+    skuFindMany.mockResolvedValue(skus);
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Payment SKU was not found',
+    );
+
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Payment SKU was not found' },
+    });
+  });
 
   it.each([
     ['keeps a positive remainder', 5, 'update', 3],
@@ -621,6 +761,104 @@ describe('StripeWebhookService', () => {
     );
     expect(orderCreate).not.toHaveBeenCalled();
     expect(eventUpdateOutside).toHaveBeenCalled();
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['an unpaid session', { payment_status: 'unpaid' }],
+    ['a session without a Payment Link', { payment_link: null }],
+    ['a session without a total', { amount_total: null }],
+    ['a zero total', { amount_total: 0 }],
+  ])('creates no order for %s', async (_name, session) => {
+    eventFindUnique.mockResolvedValue(storedEvent(checkoutEventWith(session)));
+    orderFindUnique.mockResolvedValue(null);
+    skuFindMany.mockResolvedValue([inventory[0]]);
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Checkout Session is missing payment data',
+    );
+
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Checkout Session is missing payment data' },
+    });
+  });
+
+  it('matches the buyer by the session email when Stripe sends no customer details', async () => {
+    eventFindUnique.mockResolvedValue(
+      storedEvent(
+        checkoutEventWith({
+          customer_details: null,
+          customer_email: 'Client@Example.com',
+          payment_link: { id: 'plink_1' },
+        }),
+      ),
+    );
+    orderFindUnique.mockResolvedValue(null);
+    skuFindMany.mockResolvedValue([inventory[0]]);
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+
+    expect(paymentLinkFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { stripePaymentLinkId: 'plink_1' } }),
+    );
+    expect(userFindFirst).toHaveBeenCalledWith({
+      where: { email: 'client@example.com', role: 'CLIENT' },
+      select: { id: true },
+    });
+    const [{ data }] = orderCreate.mock.calls[0] as [
+      { data: { clientId: string; paymentLinkId: string } },
+    ];
+    expect(data).toMatchObject({
+      clientId: CLIENT_ID,
+      paymentLinkId: LINK_ID,
+      stripeCheckoutSessionId: 'cs_1',
+    });
+  });
+
+  it('returns the existing order for a replayed session without charging stock again', async () => {
+    eventFindUnique.mockResolvedValue(storedEvent(checkoutEvent));
+    orderFindUnique.mockResolvedValue({ id: ORDER_ID });
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+
+    expect(orderFindUnique).toHaveBeenCalledWith({
+      where: { stripeCheckoutSessionId: 'cs_1' },
+      select: { id: true },
+    });
+    expect(paymentLinkFindUnique).not.toHaveBeenCalled();
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(eventUpdate).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID },
+      data: {
+        orderId: ORDER_ID,
+        processedAt: expect.any(Date) as Date,
+        errorMessage: null,
+      },
+    });
+  });
+
+  it('refuses a total that does not divide into a whole unit price', async () => {
+    eventFindUnique.mockResolvedValue(
+      storedEvent(checkoutEventWith({ amount_total: 3999 })),
+    );
+    orderFindUnique.mockResolvedValue(null);
+    skuFindMany.mockResolvedValue([inventory[0]]);
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Checkout Session total is not a whole unit price',
+    );
+
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: {
+        errorMessage: 'Checkout Session total is not a whole unit price',
+      },
+    });
   });
 
   it('settles a succeeded Payment Intent that matches no local order by id or by stored intent', async () => {
