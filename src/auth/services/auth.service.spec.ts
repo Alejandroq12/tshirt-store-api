@@ -4,7 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { MailService } from '../../mail/mail.service';
@@ -172,6 +172,23 @@ describe('AuthService', () => {
       refreshTokenHash: 'hash:refresh-token',
       expiresAt: REFRESH_EXPIRY,
     });
+  });
+
+  it('propagates a duplicate email constraint for the global 409 mapping', async () => {
+    const duplicate = new Prisma.PrismaClientKnownRequestError(
+      'database constraint failed',
+      { code: 'P2002', clientVersion: '6.19.3' },
+    );
+    userCreate.mockRejectedValue(duplicate);
+
+    await expect(
+      serviceWith().signUp({
+        email: USER.email,
+        password: 'example-password',
+        firstName: 'Ana',
+        lastName: 'Rivera',
+      }),
+    ).rejects.toBe(duplicate);
   });
 
   it('logs a manager in and stores a new session', async () => {
@@ -391,6 +408,25 @@ describe('AuthService', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it('rejects a reset token that expires at this very instant without claiming it', async () => {
+    resetFindUnique.mockResolvedValue({
+      id: 'token-id',
+      userId: USER.id,
+      expiresAt: new Date('2026-08-28T12:00:00.000Z'),
+      usedAt: null,
+      user: { email: USER.email },
+    });
+
+    await expect(
+      serviceWith().resetPassword({
+        resetToken: 'reset-token',
+        newPassword: 'replacement-password',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(resetUpdateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
   it('rejects a reset token another request claimed first', async () => {
     resetFindUnique.mockResolvedValue({
       id: 'token-id',
@@ -407,6 +443,9 @@ describe('AuthService', () => {
         newPassword: 'replacement-password',
       }),
     ).rejects.toThrow(BadRequestException);
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(sessionUpdateMany).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('changes a password, revokes every session, and sends the email', async () => {
