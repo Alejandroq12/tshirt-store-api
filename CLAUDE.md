@@ -97,7 +97,7 @@ asked for it". A review finding something real does not turn it into a
 requirement.
 
 If you cannot quote a sentence, the answer is to write the scenario into the
-README under _Decisions worth knowing_ or _Known limitations_ — not to build it.
+README under _Main design choices_ or _Known limits_ — not to build it.
 Run `/anchor <thing>` when unsure.
 
 ## Never commit

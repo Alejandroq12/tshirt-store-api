@@ -95,7 +95,7 @@ For each finding:
 - **Why there is no anchor.** Say where you looked. "Not in the contract" is
   only credible if you searched.
 - **Verdict:** `DOCUMENT` if the scenario is real and belongs in the README
-  under _Decisions worth knowing_ or _Known limitations_, `DROP` if it does not.
+  under _Main design choices_ or _Known limits_, `DROP` if it does not.
 - For `DOCUMENT`, draft the two or three sentences.
 
 A stale claim takes a fourth verdict, `CORRECT`, and it is not optional: a

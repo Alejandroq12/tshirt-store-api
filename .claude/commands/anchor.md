@@ -47,8 +47,8 @@ mechanism that makes the infrastructure nicer is around it.
 
 - **BUILD** — quoted anchor, and the proposal does not exceed it.
 - **DOCUMENT** — no anchor, but the scenario is real. Then write the paragraph
-  that belongs in the README under _Decisions worth knowing_ or _Known
-  limitations_: what the case is, why the literal requirement handles it badly,
+  that belongs in the README under _Main design choices_ or _Known limits_:
+  what the case is, why the literal requirement handles it badly,
   and that it was deliberately not implemented. Offer to add it.
 - **DROP** — no anchor and no real scenario.
 
