@@ -2,9 +2,11 @@ import { ClassConstructor, plainToInstance } from 'class-transformer';
 import { validateSync, ValidatorOptions } from 'class-validator';
 
 import {
+  ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
   RefreshTokenRequest,
+  ResetPasswordRequest,
   SignUpRequest,
 } from './auth.dto';
 
@@ -158,4 +160,38 @@ describe('ForgotPasswordRequest', () => {
       ]);
     },
   );
+});
+
+describe.each([
+  {
+    type: ResetPasswordRequest,
+    tokenProperty: 'resetToken',
+    body: { resetToken: 'reset-token' },
+  },
+  {
+    type: ChangePasswordRequest,
+    tokenProperty: 'currentPassword',
+    body: { currentPassword: 'current-secret' },
+  },
+])('$type.name', ({ type, tokenProperty, body }) => {
+  it.each([8, 128])('accepts a newPassword of %i characters', (length) => {
+    expect(
+      failingProperties(type, { ...body, newPassword: 'x'.repeat(length) }),
+    ).toEqual([]);
+  });
+
+  it.each([7, 129])('rejects a newPassword of %i characters', (length) => {
+    expect(
+      failingProperties(type, { ...body, newPassword: 'x'.repeat(length) }),
+    ).toEqual(['newPassword']);
+  });
+
+  it(`rejects an empty ${tokenProperty}`, () => {
+    expect(
+      failingProperties(type, {
+        [tokenProperty]: '',
+        newPassword: 'x'.repeat(8),
+      }),
+    ).toEqual([tokenProperty]);
+  });
 });
