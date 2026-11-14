@@ -287,6 +287,70 @@ describe('PaymentsService', () => {
     expect(createPaymentIntent).not.toHaveBeenCalled();
   });
 
+  it('accepts a line whose stock exactly covers the requested quantity', async () => {
+    orderFindFirst.mockResolvedValue(
+      orderFixture({
+        items: [
+          {
+            skuId: SKU_ID,
+            quantity: 2,
+            sku: {
+              stockQuantity: 2,
+              product: { isActive: true, deletedAt: null },
+            },
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      service.createIntent({ orderId: ORDER_ID }, CLIENT),
+    ).resolves.toMatchObject({ id: 'pi_1', orderId: ORDER_ID });
+    expect(createPaymentIntent).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists only the lines that current stock cannot cover', async () => {
+    const otherSkuId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    orderFindFirst.mockResolvedValue(
+      orderFixture({
+        items: [
+          {
+            skuId: otherSkuId,
+            quantity: 1,
+            sku: {
+              stockQuantity: 9,
+              product: { isActive: true, deletedAt: null },
+            },
+          },
+          {
+            skuId: SKU_ID,
+            quantity: 3,
+            sku: {
+              stockQuantity: 2,
+              product: { isActive: true, deletedAt: null },
+            },
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      service.createIntent({ orderId: ORDER_ID }, CLIENT),
+    ).rejects.toMatchObject({
+      problem: {
+        status: 409,
+        items: [
+          {
+            skuId: SKU_ID,
+            requestedQuantity: 3,
+            availableQuantity: 2,
+          },
+        ],
+      },
+    });
+    expect(createPaymentIntent).not.toHaveBeenCalled();
+  });
+
   it('creates one intent from the frozen total with order idempotency', async () => {
     const response = await service.createIntent({ orderId: ORDER_ID }, CLIENT);
 
