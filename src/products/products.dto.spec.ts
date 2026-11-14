@@ -1,7 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 
-import { ListProductsQuery } from './products.dto';
+import { LikeUpdateRequest, ListProductsQuery } from './products.dto';
 
 type RequestClass = new () => object;
 
@@ -41,4 +41,18 @@ describe('ListProductsQuery', () => {
   ])('rejects an invalid catalogue query: %p', (value, property) => {
     expect(failedProperties(ListProductsQuery, value)).toEqual([property]);
   });
+});
+
+describe('LikeUpdateRequest', () => {
+  it.each([true, false])('accepts liked %p', (liked) => {
+    expect(failedProperties(LikeUpdateRequest, { liked })).toEqual([]);
+  });
+
+  // The body is JSON, so only a real boolean is a valid liked state.
+  it.each([{ liked: 'true' }, { liked: 1 }, { liked: null }, {}])(
+    'rejects a liked state that is not a boolean: %p',
+    (value) => {
+      expect(failedProperties(LikeUpdateRequest, value)).toEqual(['liked']);
+    },
+  );
 });
