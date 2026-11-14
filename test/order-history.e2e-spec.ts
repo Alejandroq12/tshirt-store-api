@@ -239,12 +239,14 @@ describe('Order history (e2e)', () => {
       errors: [{ field: 'to' }],
     });
 
-    for (const impossible of [
+    for (const rejected of [
       '2026-02-30T00:00:00.000Z',
       '2026-02-29T00:00:00.000Z',
+      '2026-09-02T00',
+      '2026-09-02T00:00:00',
     ]) {
       await history(token)
-        .query({ limit: 10, offset: 0, from: impossible })
+        .query({ limit: 10, offset: 0, from: rejected })
         .expect(422);
     }
 
