@@ -241,13 +241,28 @@ describe('AuthService', () => {
     expect(response).not.toHaveProperty('refreshToken');
     expect(sessionCreate).not.toHaveBeenCalled();
     const refreshQuery = (
-      sessionFindFirst.mock.calls as Array<
-        [{ where: { refreshTokenHash: string; revokedAt: null } }]
-      >
+      sessionFindFirst.mock.calls as Array<[{ where: unknown }]>
     )[0][0];
-    expect(refreshQuery.where).toMatchObject({
+    expect(refreshQuery.where).toEqual({
+      id: '22222222-2222-4222-8222-222222222222',
+      userId: USER.id,
       refreshTokenHash: 'hash:refresh-token',
       revokedAt: null,
+      expiresAt: { gt: NOW },
+    });
+  });
+
+  it('issues the refreshed access token from the stored role and the token session', async () => {
+    sessionFindFirst.mockResolvedValue({
+      user: { id: USER.id, role: UserRole.MANAGER },
+    });
+
+    await serviceWith().refreshAccessToken('refresh-token');
+
+    expect(issueAccessToken).toHaveBeenCalledWith({
+      id: USER.id,
+      role: UserRole.MANAGER,
+      sessionId: '22222222-2222-4222-8222-222222222222',
     });
   });
 
@@ -257,6 +272,16 @@ describe('AuthService', () => {
     await expect(
       serviceWith().refreshAccessToken('refresh-token'),
     ).rejects.toThrow(UnauthorizedException);
+    expect(issueAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unverifiable refresh token before looking up any session', async () => {
+    verifyRefreshToken.mockRejectedValue(new UnauthorizedException());
+
+    await expect(
+      serviceWith().refreshAccessToken('refresh-token'),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(sessionFindFirst).not.toHaveBeenCalled();
     expect(issueAccessToken).not.toHaveBeenCalled();
   });
 
@@ -468,6 +493,26 @@ describe('AuthService', () => {
 
     sessionFindFirst.mockResolvedValue(null);
     await expect(serviceWith().isSessionActive(user)).resolves.toBe(false);
+  });
+
+  it('looks up an active session by id, owner, revocation and expiry', async () => {
+    sessionFindFirst.mockResolvedValue({ user: { role: UserRole.CLIENT } });
+
+    await serviceWith().isSessionActive({
+      id: USER.id,
+      role: UserRole.CLIENT,
+      sessionId: '22222222-2222-4222-8222-222222222222',
+    });
+
+    const activeQuery = (
+      sessionFindFirst.mock.calls as Array<[{ where: unknown }]>
+    )[0][0];
+    expect(activeQuery.where).toEqual({
+      id: '22222222-2222-4222-8222-222222222222',
+      userId: USER.id,
+      revokedAt: null,
+      expiresAt: { gt: NOW },
+    });
   });
 
   it('rejects an invalid reset-token duration', () => {
