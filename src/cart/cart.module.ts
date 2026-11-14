@@ -5,7 +5,7 @@ import { AuthorizationModule } from '../authorization/authorization.module';
 import { CaslAbilityFactory } from '../authorization/casl-ability.factory';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CartController } from './cart.controller';
-import { CartService } from './cart.service';
+import { CartService } from './services/cart.service';
 
 @Injectable()
 class CartAbilityRegistrar implements OnModuleInit {

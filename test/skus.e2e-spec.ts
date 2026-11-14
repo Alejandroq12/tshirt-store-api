@@ -5,7 +5,10 @@ import { Prisma, type Product, type User } from '@prisma/client';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import type { SkuDetailResponse, SkuResponse } from '../src/skus/skus.service';
+import type {
+  SkuDetailResponse,
+  SkuResponse,
+} from '../src/skus/types/skus.types';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';

@@ -21,7 +21,8 @@ import {
   isSupportedImageType,
 } from '../storage/image-upload.constants';
 import { UploadProductImageRequest } from './images.dto';
-import { ImageAssetResponse, ImagesService } from './images.service';
+import { ImagesService } from './services/images.service';
+import type { ImageAssetResponse } from './types/images.types';
 
 interface UploadedImage {
   buffer: Buffer;

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Module, Post, RawBody } from '@nestjs/common';
 import { IsEmail, IsInt, Min } from 'class-validator';
 
-import type { AuthenticatedUser } from '../../src/auth/authenticated-user';
+import type { SessionPrincipal } from '../../src/auth/types/session-principal';
 import { CurrentUser } from '../../src/auth/decorators/current-user.decorator';
 import { Public } from '../../src/auth/decorators/public.decorator';
 import { PasswordResetThrottle } from '../../src/security/password-reset-throttle.decorator';
@@ -27,7 +27,7 @@ export class ValidationProbeController {
 @Controller('probe/guarded')
 export class GuardedProbeController {
   @Get()
-  whoAmI(@CurrentUser() user: AuthenticatedUser): AuthenticatedUser {
+  whoAmI(@CurrentUser() user: SessionPrincipal): SessionPrincipal {
     return user;
   }
 }

@@ -12,7 +12,7 @@ import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { OptionalAuth } from '../auth/decorators/optional-auth.decorator';
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import { API_PREFIX } from '../bootstrap';
 import { ValidationProblemException } from '../common/problems';
@@ -23,13 +23,13 @@ import {
   ProductIdParams,
   UpdateProductRequest,
 } from './products.dto';
-import {
+import { ProductsService } from './services/products.service';
+import type {
   LikeStateResponse,
   ProductDetailResponse,
   ProductPageResponse,
   ProductResponse,
-  ProductsService,
-} from './products.service';
+} from './types/products.types';
 
 @Controller('products')
 export class ProductsController {
@@ -39,7 +39,7 @@ export class ProductsController {
   @OptionalAuth()
   listProducts(
     @Query() query: ListProductsQuery,
-    @CurrentUser({ optional: true }) user?: AuthenticatedUser,
+    @CurrentUser({ optional: true }) user?: SessionPrincipal,
   ): Promise<ProductPageResponse> {
     return this.products.list(query, user);
   }
@@ -59,7 +59,7 @@ export class ProductsController {
   @OptionalAuth()
   getProduct(
     @Param() { productId }: ProductIdParams,
-    @CurrentUser({ optional: true }) user?: AuthenticatedUser,
+    @CurrentUser({ optional: true }) user?: SessionPrincipal,
   ): Promise<ProductDetailResponse> {
     return this.products.get(productId, user);
   }
@@ -89,7 +89,7 @@ export class ProductsController {
   setProductLiked(
     @Param() { productId }: ProductIdParams,
     @Body() input: LikeUpdateRequest,
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: SessionPrincipal,
   ): Promise<LikeStateResponse> {
     return this.products.setLiked(productId, input, user);
   }

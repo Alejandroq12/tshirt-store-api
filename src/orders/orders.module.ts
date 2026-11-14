@@ -7,7 +7,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MyOrdersController } from './my-orders.controller';
 import { OrdersController } from './orders.controller';
-import { OrdersService } from './orders.service';
+import { OrdersService } from './services/orders.service';
 
 @Injectable()
 class OrdersAbilityRegistrar implements OnModuleInit {

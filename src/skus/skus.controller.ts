@@ -1,14 +1,15 @@
 import { Body, Controller, Get, Param, Patch, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { OptionalAuth } from '../auth/decorators/optional-auth.decorator';
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import { API_PREFIX } from '../bootstrap';
 import { ValidationProblemException } from '../common/problems';
 import { CreateSkuRequest, SkuIdParams, UpdateSkuRequest } from './skus.dto';
-import { SkuDetailResponse, SkuResponse, SkusService } from './skus.service';
+import { SkusService } from './services/skus.service';
+import type { SkuDetailResponse, SkuResponse } from './types/skus.types';
 
 @Controller('skus')
 export class SkusController {
@@ -29,7 +30,7 @@ export class SkusController {
   @OptionalAuth()
   getSku(
     @Param() { skuId }: SkuIdParams,
-    @CurrentUser({ optional: true }) user?: AuthenticatedUser,
+    @CurrentUser({ optional: true }) user?: SessionPrincipal,
   ): Promise<SkuDetailResponse> {
     return this.skus.get(skuId, user);
   }

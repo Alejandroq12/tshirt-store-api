@@ -142,7 +142,7 @@ src/
   images/          S3 upload, fallback vs. per-SKU assignment
   cart/            client cart and current-price totals
   orders/          order snapshots, history and status lifecycle
-  payments/        Stripe: methods/ links+intents · webhook/ settlement · stripe/ the SDK façade
+  payments/        Stripe: Payment Links and Intents, the signed webhook, the SDK façade
   notifications/   stock-cycle/ · delivery/ · reconciliation/, queue names at the root
   common/          Problem Details filter, problem types, validation helpers
   config/          environment schema that fails the boot
@@ -158,6 +158,14 @@ api/openapi.yaml   the contract — 28 operations
 docs/              architecture, data lifecycle, implementation notes, DBML
 mcp/               the contract MCP server used by this repository's tooling
 ```
+
+Every slice that serves contract operations — `auth`, `products`, `skus`,
+`images`, `cart`, `orders`, `payments` — has one shape: the module, its
+controllers and its DTO at the root, every `@Injectable()` provider in
+`services/`, the response interfaces in `types/`. `notifications` and the
+adapters are not slices and keep their own layout. `SessionPrincipal`
+(`src/auth/types/session-principal.ts`) is the user and session a request runs
+as; `@CurrentUser()` yields it.
 
 Unit specs live next to their subject as `*.spec.ts` inside `src/`. End-to-end
 specs live in `test/` as `*.e2e-spec.ts` with their own Jest config.

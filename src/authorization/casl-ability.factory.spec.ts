@@ -1,14 +1,14 @@
 import { subject } from '@casl/ability';
 
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { CaslAbilityFactory } from './casl-ability.factory';
 
-const MANAGER: AuthenticatedUser = {
+const MANAGER: SessionPrincipal = {
   id: 'manager-id',
   role: 'MANAGER',
   sessionId: 'manager-session',
 };
-const CLIENT: AuthenticatedUser = {
+const CLIENT: SessionPrincipal = {
   id: 'client-id',
   role: 'CLIENT',
   sessionId: 'client-session',

@@ -3,7 +3,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Prisma } from '@prisma/client';
 import type { Job } from 'bullmq';
 
-import { StripeWebhookService } from '../../payments/webhook/stripe-webhook.service';
+import { StripeWebhookService } from '../../payments/services/stripe-webhook.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ReconciliationProducer } from './reconciliation.producer';
 import {

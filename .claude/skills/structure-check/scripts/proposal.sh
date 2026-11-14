@@ -3,12 +3,12 @@
 # as "proposed -> actual: reason"; anything else fails, as do a missing report,
 # a missing block and a malformed line.
 #
-#   ./proposal.sh                                        # docs/ai-module/evidence/structure-audit-before.md
+#   ./proposal.sh                                        # docs/ai-module/evidence/structure-audit-layout.md
 #   ./proposal.sh docs/ai-module/evidence/structure-audit-v2.md
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-report="${1:-docs/ai-module/evidence/structure-audit-before.md}"
+report="${1:-docs/ai-module/evidence/structure-audit-layout.md}"
 [ -f "$report" ] || { echo "no audit report at $report" >&2; exit 2; }
 
 # Scans the whole report. Exit 1 when the block is absent, 2 when a closing fence is, 3 when it appears twice.

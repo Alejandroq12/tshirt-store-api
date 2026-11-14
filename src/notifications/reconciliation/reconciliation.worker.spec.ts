@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { Job } from 'bullmq';
 
-import type { StripeWebhookService } from '../../payments/webhook/stripe-webhook.service';
+import type { StripeWebhookService } from '../../payments/services/stripe-webhook.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ReconciliationProducer } from './reconciliation.producer';
 import {

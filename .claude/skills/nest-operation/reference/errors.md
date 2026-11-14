@@ -68,7 +68,7 @@ if (result.count !== 1) throw new ConflictException();
 ```
 
 `updateMany` with the expected state in the `where` clause, then a count of zero
-means the state changed underneath. See `src/products/products.service.ts:288`.
+means the state changed underneath. See `src/products/services/products.service.ts:232`.
 
 ## Never do this on a 5xx
 

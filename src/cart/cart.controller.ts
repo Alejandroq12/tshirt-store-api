@@ -11,14 +11,15 @@ import {
 } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import {
   CartItemCreateRequest,
   CartItemIdParams,
   CartItemUpdateRequest,
 } from './cart.dto';
-import { CartItemResponse, CartResponse, CartService } from './cart.service';
+import { CartService } from './services/cart.service';
+import type { CartItemResponse, CartResponse } from './types/cart.types';
 
 @Controller('me/cart')
 export class CartController {
@@ -26,7 +27,7 @@ export class CartController {
 
   @Get()
   @CheckAbilities({ action: 'manage', subject: 'Cart' })
-  getMyCart(@CurrentUser() user: AuthenticatedUser): Promise<CartResponse> {
+  getMyCart(@CurrentUser() user: SessionPrincipal): Promise<CartResponse> {
     return this.cart.getOrCreate(user);
   }
 
@@ -34,7 +35,7 @@ export class CartController {
   @CheckAbilities({ action: 'manage', subject: 'Cart' })
   addCartItem(
     @Body() input: CartItemCreateRequest,
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: SessionPrincipal,
   ): Promise<CartItemResponse> {
     return this.cart.addItem(user, input);
   }
@@ -44,7 +45,7 @@ export class CartController {
   updateCartItem(
     @Param() { itemId }: CartItemIdParams,
     @Body() input: CartItemUpdateRequest,
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: SessionPrincipal,
   ): Promise<CartItemResponse> {
     return this.cart.updateItem(user, itemId, input);
   }
@@ -54,7 +55,7 @@ export class CartController {
   @CheckAbilities({ action: 'manage', subject: 'Cart' })
   removeCartItem(
     @Param() { itemId }: CartItemIdParams,
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: SessionPrincipal,
   ): Promise<void> {
     return this.cart.removeItem(user, itemId);
   }

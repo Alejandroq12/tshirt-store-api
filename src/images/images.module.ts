@@ -6,7 +6,7 @@ import { CaslAbilityFactory } from '../authorization/casl-ability.factory';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 import { ImagesController } from './images.controller';
-import { ImagesService } from './images.service';
+import { ImagesService } from './services/images.service';
 
 @Injectable()
 class ImagesAbilityRegistrar implements OnModuleInit {

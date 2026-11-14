@@ -11,7 +11,7 @@ import {
 import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { AuthenticatedUser } from '../auth/authenticated-user';
+import type { SessionPrincipal } from '../auth/types/session-principal';
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import { API_PREFIX } from '../bootstrap';
 import {
@@ -19,11 +19,8 @@ import {
   OrderIdParams,
   OrderStatusUpdateRequest,
 } from './orders.dto';
-import {
-  OrderPageResponse,
-  OrderResponse,
-  OrdersService,
-} from './orders.service';
+import { OrdersService } from './services/orders.service';
+import type { OrderPageResponse, OrderResponse } from './types/orders.types';
 
 @Controller('orders')
 export class OrdersController {
@@ -32,7 +29,7 @@ export class OrdersController {
   @Post()
   @CheckAbilities({ action: 'create', subject: 'Order' })
   async createOrderFromCart(
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: SessionPrincipal,
     @Res({ passthrough: true }) response: Response,
   ): Promise<OrderResponse> {
     const order = await this.orders.createFromCart(user);
@@ -49,7 +46,7 @@ export class OrdersController {
   @Get(':orderId')
   getOrder(
     @Param() { orderId }: OrderIdParams,
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: SessionPrincipal,
   ): Promise<OrderResponse> {
     return this.orders.get(orderId, user);
   }
@@ -59,7 +56,7 @@ export class OrdersController {
   updateOrderStatus(
     @Param() { orderId }: OrderIdParams,
     @Body() input: OrderStatusUpdateRequest,
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: SessionPrincipal,
   ): Promise<OrderResponse> {
     return this.orders.updateStatus(orderId, input, user);
   }

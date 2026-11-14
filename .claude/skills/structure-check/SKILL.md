@@ -32,7 +32,7 @@ what finds it.
    is reported at the defaults.
 
 2. **The proposal.** `scripts/proposal.sh` reads the audit report,
-   `docs/ai-module/evidence/structure-audit-before.md` unless `AUDIT=` names
+   `docs/ai-module/evidence/structure-audit-layout.md` unless `AUDIT=` names
    another, and takes every path in its `proposal` block. The report and the
    block are required: a missing report, a block that is missing, repeated or
    unterminated, or a malformed line exits 2, and only a block that is

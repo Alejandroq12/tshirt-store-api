@@ -2,8 +2,8 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-import { PasswordService } from '../src/auth/credentials/password.service';
-import { SecretTokenService } from '../src/auth/credentials/secret-token.service';
+import { PasswordService } from '../src/auth/services/password.service';
+import { SecretTokenService } from '../src/auth/services/secret-token.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './support/create-test-app';
 import { truncateAll } from './support/database';

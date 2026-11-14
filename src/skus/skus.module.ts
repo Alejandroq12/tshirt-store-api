@@ -6,7 +6,7 @@ import { CaslAbilityFactory } from '../authorization/casl-ability.factory';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SkusController } from './skus.controller';
-import { SkusService } from './skus.service';
+import { SkusService } from './services/skus.service';
 
 @Injectable()
 class SkusAbilityRegistrar implements OnModuleInit {

@@ -23,10 +23,10 @@ Reading the caller:
 
 ```ts
 // Required — throws 401 if the guard did not set it
-changePassword(@CurrentUser() user: AuthenticatedUser)
+changePassword(@CurrentUser() user: SessionPrincipal)
 
 // Optional — pairs with @OptionalAuth()
-getSku(@CurrentUser({ optional: true }) user?: AuthenticatedUser)
+getSku(@CurrentUser({ optional: true }) user?: SessionPrincipal)
 ```
 
 `@CurrentUser()` without `optional` on an `@OptionalAuth()` route defeats the
