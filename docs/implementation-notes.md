@@ -28,7 +28,7 @@ app.useGlobalPipes(
 `unevaluatedProperties: false`. If a DTO accepts unknown fields, the
 implementation is more permissive than the contract.
 
-### `constraints.sql` is applied as a migration
+### The constraints migration holds what Prisma cannot express
 
 Prisma does not support CHECK constraints, partial indexes, or triggers. They
 therefore live in the constraints migration,
@@ -38,7 +38,7 @@ rather than the Prisma schema:
 | Object                                     | Count |
 | ------------------------------------------ | ----- |
 | CHECK constraints                          | 18    |
-| Indexes (3 partial unique, 5 supporting)   | 8     |
+| Partial indexes (3 unique, 4 supporting)   | 7     |
 | Triggers                                   | 1     |
 
 The directory timestamps guarantee the order: `..._init` first, followed by
