@@ -202,6 +202,63 @@ describe('ProductsService', () => {
     expect(likeFindMany).not.toHaveBeenCalled();
   });
 
+  it('shows a manager retired and inactive products with no liked flag', async () => {
+    productFindMany.mockResolvedValue([
+      {
+        ...PRODUCT,
+        isActive: false,
+        deletedAt: NOW,
+        category: CATEGORY,
+        images: [],
+      },
+      {
+        ...PRODUCT,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        isActive: false,
+        category: CATEGORY,
+        images: [],
+      },
+    ]);
+    productCount.mockResolvedValue(2);
+
+    const response = await service.list({ limit: 10, offset: 0 }, MANAGER);
+
+    expect(response).toEqual({
+      items: [
+        {
+          id: PRODUCT.id,
+          category: CATEGORY,
+          name: PRODUCT.name,
+          description: null,
+          status: ProductStatus.RETIRED,
+          primaryImageUrl: null,
+          liked: null,
+        },
+        {
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          category: CATEGORY,
+          name: PRODUCT.name,
+          description: null,
+          status: ProductStatus.INACTIVE,
+          primaryImageUrl: null,
+          liked: null,
+        },
+      ],
+      pagination: { limit: 10, offset: 0, total: 2 },
+    });
+    expect(likeFindMany).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty client page past the end without querying likes', async () => {
+    const response = await service.list({ limit: 10, offset: 40 }, CLIENT);
+
+    expect(response).toEqual({
+      items: [],
+      pagination: { limit: 10, offset: 40, total: 0 },
+    });
+    expect(likeFindMany).not.toHaveBeenCalled();
+  });
+
   it('creates a new product as inactive', async () => {
     const response = await service.create({
       categoryId: CATEGORY.id,
@@ -459,12 +516,51 @@ describe('ProductsService', () => {
     await expect(
       service.update(PRODUCT.id, { status: ProductStatus.INACTIVE }),
     ).rejects.toThrow(ConflictException);
+    expect(productUpdateMany).not.toHaveBeenCalled();
 
     const response = await service.update(PRODUCT.id, {
       name: 'Edited after retirement',
     });
     expect(response.status).toBe(ProductStatus.RETIRED);
     expect(response.retiredAt).toBe(NOW.toISOString());
+  });
+
+  it('refuses reactivation of a retired product before any image lookup', async () => {
+    productFindUnique.mockResolvedValue({
+      ...PRODUCT,
+      isActive: false,
+      deletedAt: NOW,
+    });
+
+    await expect(
+      service.update(PRODUCT.id, { status: ProductStatus.ACTIVE }),
+    ).rejects.toThrow(ConflictException);
+    expect(imageFindFirst).not.toHaveBeenCalled();
+    expect(productUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('keeps the original timestamp when a retired product is retired again', async () => {
+    const earlier = new Date('2026-08-01T09:30:00.000Z');
+    const retired = { ...PRODUCT, isActive: false, deletedAt: earlier };
+    productFindUnique.mockResolvedValue(retired);
+    productFindUniqueOrThrow.mockResolvedValue(retired);
+
+    const response = await service.update(PRODUCT.id, {
+      status: ProductStatus.RETIRED,
+    });
+
+    expect(productUpdateMany).toHaveBeenCalledWith({
+      where: { id: PRODUCT.id },
+      data: {
+        categoryId: undefined,
+        name: undefined,
+        description: undefined,
+        isActive: false,
+        deletedAt: earlier,
+      },
+    });
+    expect(response.status).toBe(ProductStatus.RETIRED);
+    expect(response.retiredAt).toBe(earlier.toISOString());
   });
 
   it('returns 404 for a missing product or replacement category', async () => {
@@ -477,6 +573,27 @@ describe('ProductsService', () => {
     await expect(
       service.update(PRODUCT.id, { categoryId: CATEGORY.id }),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('moves a product to an existing replacement category', async () => {
+    const categoryId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    productFindUniqueOrThrow.mockResolvedValue({ ...PRODUCT, categoryId });
+
+    const response = await service.update(PRODUCT.id, { categoryId });
+
+    expect(categoryFindUnique).toHaveBeenCalledWith({
+      where: { id: categoryId },
+      select: { id: true },
+    });
+    expect(productUpdateMany).toHaveBeenCalledWith({
+      where: { id: PRODUCT.id },
+      data: {
+        categoryId,
+        name: undefined,
+        description: undefined,
+      },
+    });
+    expect(response.categoryId).toBe(categoryId);
   });
 
   it('turns a concurrent retirement into a conflict instead of reactivating it', async () => {
