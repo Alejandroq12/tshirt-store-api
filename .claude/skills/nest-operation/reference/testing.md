@@ -2,7 +2,8 @@
 
 The requirements ask for unit tests written alongside the code and focused on
 services, plus end-to-end tests on three flows: authentication, checkout and
-order history. Nothing else gets an e2e spec.
+order history. A new operation gets an e2e spec only when it is part of one of
+those flows.
 
 Two suites, two configurations:
 
@@ -16,16 +17,25 @@ because the specs truncate tables between cases.
 
 ## Unit specs construct the service directly
 
-No `Test.createTestingModule` for a service. Instantiate it with hand-built
-fakes, the way `src/skus/services/skus.service.spec.ts` does:
+No `Test.createTestingModule` for a service. The two auth specs that build a
+testing module (`token.service.spec.ts`, which needs `JwtModule`, and
+`password.service.spec.ts`) are exceptions, not the pattern. Instantiate it with
+hand-built fakes, the way `src/skus/services/skus.service.spec.ts` does:
 
 ```ts
-const skuCreate = jest.fn();
 const prisma = {
-  productSku: { create: skuCreate },
+  product: { findUnique: productFindUnique },
+  productSku: { create: skuCreate, findFirst: skuFindFirst },
+  $transaction: transaction,
 } as unknown as PrismaService;
-
-const service = new SkusService(prisma, {
+const stockCycle = {
+  totalStock,
+  evaluate: evaluateStockCycle,
+} as unknown as StockCycleService;
+const notifications = {
+  enqueue: enqueueNotifications,
+} as unknown as StockNotificationProducer;
+const service = new SkusService(prisma, stockCycle, notifications, {
   get: () => 'USD',
 } as unknown as ConfigService<EnvironmentVariables, true>);
 ```
@@ -71,14 +81,17 @@ error path with no test.
 
 ## End-to-end specs
 
-Only for authentication, checkout and order history. Build the app with
+Only for authentication, checkout and order history. `test/` also holds cart,
+products, skus and images specs and harness specs (bootstrap, database,
+http-contract, fatal-startup); they are not a reason to add one. Build the app
+with
 `createTestApp()` from `test/support/create-test-app.ts` — it calls the same
 `configureApp` that `main.ts` calls, so the pipe, the filter, helmet, CORS and
 the prefix are the production ones. A test that configures its own app is
 testing a different application.
 
-`createTestApp` accepts overrides for `MailService` and `S3StorageService`. Use
-them; a test must not send mail or write to S3.
+`createTestApp` accepts overrides for `MailService`, `S3StorageService` and
+`StripeClient`. Use them; a test must not send mail, write to S3 or call Stripe.
 
 Assert the status code, the response body, and the database state after the
 call. A checkout test that does not read the row back has not tested checkout.
