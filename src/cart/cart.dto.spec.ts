@@ -1,7 +1,11 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 
-import { CartItemCreateRequest } from './cart.dto';
+import {
+  CartItemCreateRequest,
+  CartItemIdParams,
+  CartItemUpdateRequest,
+} from './cart.dto';
 
 const SKU_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';
 
@@ -29,6 +33,29 @@ describe('CartItemCreateRequest', () => {
 
     expect(validateSync(input).map((error) => error.property)).toEqual([
       property,
+    ]);
+  });
+});
+
+describe('CartItemUpdateRequest', () => {
+  it.each([{}, { quantity: 0 }, { quantity: 1.5 }, { quantity: '2' }])(
+    'rejects a quantity update that is missing, below 1 or not an integer: %p',
+    (value) => {
+      const input = plainToInstance(CartItemUpdateRequest, value);
+
+      expect(validateSync(input).map((error) => error.property)).toEqual([
+        'quantity',
+      ]);
+    },
+  );
+});
+
+describe('CartItemIdParams', () => {
+  it('rejects a malformed cart item id', () => {
+    const input = plainToInstance(CartItemIdParams, { itemId: 'not-a-uuid' });
+
+    expect(validateSync(input).map((error) => error.property)).toEqual([
+      'itemId',
     ]);
   });
 });
