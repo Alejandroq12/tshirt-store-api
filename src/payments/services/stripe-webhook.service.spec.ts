@@ -449,6 +449,31 @@ describe('StripeWebhookService', () => {
   });
 
   it.each([
+    ['inactive', { isActive: false, deletedAt: null }],
+    ['retired', { isActive: false, deletedAt: new Date(EVENT_TIME * 1000) }],
+  ])(
+    'leaves stock, order and event pending when a product became %s after the intent',
+    async (_state, lifecycle) => {
+      skuFindMany.mockResolvedValue([
+        inventory[0],
+        { ...inventory[1], product: { ...inventory[1].product, ...lifecycle } },
+      ]);
+
+      await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+        'Payment product is not active',
+      );
+
+      expect(skuUpdate).not.toHaveBeenCalled();
+      expect(orderUpdateMany).not.toHaveBeenCalled();
+      expect(eventUpdate).not.toHaveBeenCalled();
+      expect(eventUpdateOutside).toHaveBeenCalledWith({
+        where: { id: STORED_EVENT_ID, processedAt: null },
+        data: { errorMessage: 'Payment product is not active' },
+      });
+    },
+  );
+
+  it.each([
     ['keeps a positive remainder', 5, 'update', 3],
     ['deletes an exact remainder', 2, 'delete', 0],
     ['ignores a missing cart row', null, 'none', 0],
@@ -560,6 +585,30 @@ describe('StripeWebhookService', () => {
     expect(orderCreate).not.toHaveBeenCalled();
     expect(skuUpdate).not.toHaveBeenCalled();
     expect(eventUpdateOutside).toHaveBeenCalled();
+  });
+
+  it('leaves a Checkout Session without a buyer email pending', async () => {
+    const anonymousCheckoutEvent = {
+      ...checkoutEvent,
+      data: {
+        object: {
+          ...checkoutEvent.data.object,
+          customer_details: { email: null },
+          customer_email: null,
+        },
+      },
+    } as unknown as Stripe.CheckoutSessionCompletedEvent;
+    eventFindUnique.mockResolvedValue(storedEvent(anonymousCheckoutEvent));
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Checkout Session is missing payment data',
+    );
+    expect(userFindFirst).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Checkout Session is missing payment data' },
+    });
   });
 
   it('still leaves a Payment Link event pending when the link itself is unknown', async () => {
