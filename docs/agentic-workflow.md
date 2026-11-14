@@ -92,7 +92,9 @@ not build it".
 CI order and stops at the first failure. `/next-op` and `/op` turn the contract
 into a plan. `/anchor` is the scope gate. `/pr` drafts commits. `/defend` runs a
 cold-call interview on how the code works, which is preparation for a technical
-review rather than a coding aid.
+review rather than a coding aid. `/drill` runs spaced retrieval practice on the
+Claude Code mechanisms this repository uses, drawing every question from a file
+here.
 
 **Subagents** are read-only reviewers, each with one job and its own context:
 `contract-auditor` compares implementation to contract, `scope-warden` finds
