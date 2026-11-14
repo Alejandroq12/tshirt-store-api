@@ -658,6 +658,47 @@ describe('StripeWebhookService', () => {
     expect(eventUpdateOutside).not.toHaveBeenCalled();
   });
 
+  it('settles a succeeded Payment Intent whose metadata order id matches no local order', async () => {
+    orderFindUnique.mockResolvedValue(null);
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+    expect(orderFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: ORDER_ID } }),
+    );
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(eventUpdate).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID },
+      data: {
+        orderId: null,
+        processedAt: expect.any(Date) as Date,
+        errorMessage:
+          'Payment Intent is not associated with a local order; no business action was applied',
+      },
+    });
+    expect(eventUpdateOutside).not.toHaveBeenCalled();
+  });
+
+  it('still refuses an intent whose order was paid by Payment Link', async () => {
+    orderFindUnique.mockResolvedValue({
+      ...intentOrder,
+      status: OrderStatus.PAID,
+      paymentMethod: PaymentMethod.PAYMENT_LINK,
+      stripePaymentIntentId: null,
+    });
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Payment Intent order was not found',
+    );
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Payment Intent order was not found' },
+    });
+  });
+
   it('settles the order found by stored intent id when the metadata carries no order id', async () => {
     const strippedIntentEvent = {
       ...paymentIntentEvent,
