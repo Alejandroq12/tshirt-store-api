@@ -123,8 +123,8 @@ hook blocks these commands, so attempting one wastes a turn.
 | Migrate (test DB) | `npm run db:migrate:test`               |
 | Seed              | `npm run db:seed`                       |
 
-`npm run test:e2e` runs `db:migrate:test` first and needs `.env.test` plus a
-running PostgreSQL (`docker compose up -d`). It runs `--runInBand` because the
+`npm run test:e2e` runs `db:migrate:test` first and needs `.env.test` plus
+running PostgreSQL and Redis (`docker compose up -d`). It runs `--runInBand` because the
 specs truncate tables.
 
 Coverage thresholds are enforced: statements 85, branches 75, functions 80,
