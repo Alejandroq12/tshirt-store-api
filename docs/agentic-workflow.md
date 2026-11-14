@@ -66,9 +66,9 @@ Three refusals are enforced by code, not by convention. A rule written only in a
 document is a request; these are hooks, and they run before the tool call.
 
 **Commits belong to the repository owner.** `.claude/hooks/block-git-write.mjs`
-blocks `git commit`, `push`, `tag`, `reset`, `rebase`, `merge`, `revert`,
-`cherry-pick`, `clean` and `gh pr create`, including when they are hidden behind
-`&&` in a compound command. Read-only git is untouched. The `/pr` command
+blocks `git commit`, `push`, `tag`, `reset`, `rebase`, `clean`, `revert`,
+`cherry-pick`, `merge`, `am` and `apply`, and `gh pr create`, `merge`, `close`
+and `edit`, including when they are hidden behind `&&` in a compound command. Read-only git is untouched. The `/pr` command
 produces a commit breakdown and a pull-request description to hand over instead.
 
 **The real environment files are never opened.**
