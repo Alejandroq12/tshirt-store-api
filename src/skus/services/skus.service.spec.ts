@@ -334,4 +334,16 @@ describe('SkusService', () => {
     expect(evaluateStockCycle).not.toHaveBeenCalled();
     expect(enqueueNotifications).not.toHaveBeenCalled();
   });
+
+  it('evaluates no cycle and enqueues nothing when the SKU update rolls back', async () => {
+    const duplicate = prismaError('P2002');
+    skuUpdate.mockRejectedValue(duplicate);
+
+    await expect(service.update(SKU.id, { stockQuantity: 0 })).rejects.toBe(
+      duplicate,
+    );
+    expect(skuUpdate).toHaveBeenCalledTimes(1);
+    expect(evaluateStockCycle).not.toHaveBeenCalled();
+    expect(enqueueNotifications).not.toHaveBeenCalled();
+  });
 });
