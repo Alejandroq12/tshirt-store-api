@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { INestApplication } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import request from 'supertest';
@@ -125,5 +127,67 @@ describe('Cart (e2e)', () => {
     await expect(
       prisma.cart.count({ where: { clientId: manager.id } }),
     ).resolves.toBe(0);
+  });
+
+  it('returns 409 for a SKU already in the cart and keeps the first quantity', async () => {
+    const client = await createClient(prisma);
+    const token = await login(client);
+    const { sku } = await createProductWithSku(prisma, { isActive: true });
+    await addItem(token, sku.id, 2).expect(201);
+
+    // The service does not look for the existing item; the unique index
+    // uq_cart_sku raises P2002, which the problem filter maps to 409.
+    const conflict = await addItem(token, sku.id, 5).expect(409);
+
+    expect(conflict.headers['content-type']).toMatch(
+      /^application\/problem\+json/,
+    );
+    expect(conflict.body).toEqual({
+      type: 'about:blank',
+      title: 'Conflict',
+      status: 409,
+      instance: '/v1/me/cart/items',
+    });
+    const cart = (await getCart(token).expect(200)).body as CartResponse;
+    expect(cart.items).toHaveLength(1);
+    expect(cart.items[0]).toMatchObject({ skuId: sku.id, quantity: 2 });
+  });
+
+  it('returns 404 for an unknown SKU and for a SKU whose product is inactive', async () => {
+    const client = await createClient(prisma);
+    const token = await login(client);
+    const { sku: hidden } = await createProductWithSku(prisma, {
+      isActive: false,
+    });
+
+    await addItem(token, randomUUID(), 1).expect(404);
+    await addItem(token, hidden.id, 1).expect(404);
+
+    await expect(prisma.cartItem.count()).resolves.toBe(0);
+  });
+
+  it("returns 404 for another client's item on PATCH and DELETE, then 204 and 404 for the owner", async () => {
+    const owner = await createClient(prisma);
+    const other = await createClient(prisma);
+    const ownerToken = await login(owner);
+    const otherToken = await login(other);
+    const { sku } = await createProductWithSku(prisma, { isActive: true });
+    const created = await addItem(ownerToken, sku.id, 2).expect(201);
+    const itemId = (created.body as CartItemResponse).id;
+
+    await updateItem(otherToken, itemId, 5).expect(404);
+    await removeItem(otherToken, itemId).expect(404);
+
+    await expect(
+      prisma.cartItem.findUniqueOrThrow({ where: { id: itemId } }),
+    ).resolves.toMatchObject({ quantity: 2 });
+
+    const removed = await removeItem(ownerToken, itemId).expect(204);
+    expect(removed.text).toBe('');
+    await removeItem(ownerToken, itemId).expect(404);
+    await updateItem(ownerToken, itemId, 3).expect(404);
+
+    const cart = (await getCart(ownerToken).expect(200)).body as CartResponse;
+    expect(cart).toMatchObject({ items: [], subtotalAmount: '0.00' });
   });
 });
