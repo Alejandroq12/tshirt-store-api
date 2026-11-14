@@ -51,11 +51,10 @@ const checkoutEvent = {
 
 const checkoutEventWith = (
   session: Record<string, unknown>,
-): Stripe.CheckoutSessionCompletedEvent =>
-  ({
-    ...checkoutEvent,
-    data: { object: { ...checkoutEvent.data.object, ...session } },
-  }) as unknown as Stripe.CheckoutSessionCompletedEvent;
+): Stripe.CheckoutSessionCompletedEvent => ({
+  ...checkoutEvent,
+  data: { object: { ...checkoutEvent.data.object, ...session } },
+});
 
 const inventory = [
   {
@@ -437,7 +436,7 @@ describe('StripeWebhookService', () => {
     const repeatedIntentEvent = {
       ...paymentIntentEvent,
       id: 'evt_intent_repeat',
-    } as unknown as Stripe.PaymentIntentSucceededEvent;
+    };
     eventFindUnique.mockResolvedValue(storedEvent(repeatedIntentEvent));
     orderFindUnique.mockResolvedValue({
       ...intentOrder,
@@ -486,7 +485,7 @@ describe('StripeWebhookService', () => {
         data: {
           object: { ...paymentIntentEvent.data.object, status: 'processing' },
         },
-      } as unknown as Stripe.PaymentIntentSucceededEvent,
+      },
       intentOrder,
       'Payment Intent event is missing payment data',
     ],

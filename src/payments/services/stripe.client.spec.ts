@@ -79,7 +79,7 @@ describe('StripeClient', () => {
         .spyOn(
           Object.getPrototypeOf(
             signer.paymentIntents,
-          ) as Stripe.PaymentIntentsResource,
+          ) as Stripe.PaymentIntentResource,
           'create',
         )
         .mockResolvedValue(intent as Stripe.Response<Stripe.PaymentIntent>);
@@ -107,7 +107,7 @@ describe('StripeClient', () => {
         .spyOn(
           Object.getPrototypeOf(
             signer.paymentLinks,
-          ) as Stripe.PaymentLinksResource,
+          ) as Stripe.PaymentLinkResource,
           'create',
         )
         .mockResolvedValue(link as Stripe.Response<Stripe.PaymentLink>);
