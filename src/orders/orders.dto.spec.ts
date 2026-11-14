@@ -24,19 +24,26 @@ describe('ListMyOrdersQuery', () => {
     },
   );
 
-  it.each(['2026-09-01', '2026-02-30T00:00:00Z'])(
-    'rejects %s as a from or to bound',
-    (bound) => {
-      const input = plainToInstance(ListMyOrdersQuery, {
-        ...PAGE,
-        from: bound,
-        to: bound,
-      });
+  it.each([
+    '2026-09-01',
+    '2026-02-30T00:00:00Z',
+    '2026-09-01T00',
+    '2026-09-01T00:00',
+    '2026-09-01T00:00:00',
+    '2026-09-01T00:00:00+0000',
+    '2026-W36-2T00:00:00Z',
+    '2026-244T00:00:00Z',
+    '20260901T000000Z',
+  ])('rejects %s as a from or to bound', (bound) => {
+    const input = plainToInstance(ListMyOrdersQuery, {
+      ...PAGE,
+      from: bound,
+      to: bound,
+    });
 
-      expect(validateSync(input).map(({ property }) => property)).toEqual([
-        'from',
-        'to',
-      ]);
-    },
-  );
+    expect(validateSync(input).map(({ property }) => property)).toEqual([
+      'from',
+      'to',
+    ]);
+  });
 });
