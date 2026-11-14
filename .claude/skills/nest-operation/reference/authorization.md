@@ -46,7 +46,7 @@ createSku(...)
 ```
 
 `@CheckAbilities` sets metadata and applies `AbilitiesGuard` in one decorator.
-`action` is one of `manage | create | read | update | delete`; `subject` is a
+`action` is one of `manage | create | read | list | update | delete`; `subject` is a
 Prisma model name from `AppSubjects` in `src/authorization/ability.types.ts`.
 
 **CASL does not guard the public reads.** `listProducts` and `getProduct` have no
@@ -75,7 +75,7 @@ class SkusAbilityRegistrar implements OnModuleInit {
 }
 
 @Module({
-  imports: [AuthorizationModule, PrismaModule],
+  imports: [AuthorizationModule, NotificationsModule, PrismaModule],
   controllers: [SkusController],
   providers: [SkusService, SkusAbilityRegistrar],
 })
@@ -91,12 +91,13 @@ Three things carry the design:
   the same registrar grants a manager two abilities and a client none.
 - The module must import `AuthorizationModule` to inject `CaslAbilityFactory`.
 
-The grant is deliberately narrow. A client currently gets **zero** rules — the
-whole ability has no entries at all. Do not add `can('read', 'Product')` to make
-the model tidier; nothing checks it, and
-`src/authorization/registered-abilities.spec.ts` asserts a client's rule list is
-empty. That test is the guard against permission creep, so a new rule means
-updating it on purpose.
+The grant is deliberately narrow. A client gets exactly five rules
+(`update ProductLike`, `manage Cart`, `create`/`list`/`update Order`) and a
+manager eight; `src/authorization/registered-abilities.spec.ts` lists each
+expected ability per role and asserts both rule counts. Do not add
+`can('read', 'Product')` to make the model tidier; nothing checks it, and that
+test is the guard against permission creep, so a new rule means updating it on
+purpose.
 
 ## Adding a rule for a new operation
 

@@ -30,13 +30,14 @@ contract declares that 422 on almost every parameterised route.
 
 ## Optional properties use `@OptionalProperty()`
 
-Never `@IsOptional()`. From `src/common/validation/optional-property.decorator.ts`.
+Use `@OptionalProperty()` for a body property that may be absent but not null.
+`@IsOptional()` only where the contract allows `null` (`description`) and on
+query parameters. From `src/common/validation/optional-property.decorator.ts`.
 
 `@IsOptional()` from class-validator skips validation when the value is `null`
 as well as when it is absent, so `{ "price": null }` passes and reaches the
 service as `null`. `@OptionalProperty()` skips only when the key is absent, so
-an explicit `null` is a 422. `docs/implementation-notes.md` covers why this
-mattered enough to write a decorator for.
+an explicit `null` is a 422.
 
 ## Money
 
@@ -80,15 +81,19 @@ a guess. `get_operation` gives the request schema name; read it in
 
 ## Enums
 
-Validate against the Prisma enum, not a string literal union:
+Validate against a DTO-local enum whose values are the contract's lowercase
+spellings (`ProductStatus` in `src/products/products.dto.ts`) and map to the
+Prisma enum in the service (`src/orders/services/orders.service.ts`). Never
+`@IsEnum` a `@prisma/client` enum: its values are uppercase.
 
 ```ts
-import { UserRole } from '@prisma/client';
+export enum ProductStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  RETIRED = 'retired',
+}
 
-@IsEnum(UserRole)
-role!: UserRole;
+@OptionalProperty()
+@IsEnum(ProductStatus)
+status?: ProductStatus;
 ```
-
-The contract spells enum values in lowercase and Prisma in uppercase. The
-mapping is explicit at the boundary — check how an existing operation does it
-before inventing a second way.

@@ -17,8 +17,8 @@ tests in step 6.
 6. `npm run test:ci`
 7. `npm run test:e2e`
 
-Step 7 needs PostgreSQL. Check `docker compose ps` first; if the postgres service
-is not up, run `docker compose up -d` and say so. It also needs `.env.test` to
+Step 7 needs PostgreSQL and Redis. Check `docker compose ps` first; if either
+service is not up, run `docker compose up -d` and say so. It also needs `.env.test` to
 exist — if the run fails because it does not, say so and stop. Do not create or
 modify `.env.test`; that file is the repository owner's.
 

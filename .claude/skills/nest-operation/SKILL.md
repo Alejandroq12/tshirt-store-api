@@ -8,7 +8,7 @@ description: How this repository implements one HTTP operation from api/openapi.
 An operation is delivered when the contract, the code and the tests say the
 same thing. Work in the order below; each step depends on the one before it, and
 skipping ahead produces the two failures that actually happen here — a status
-code nothing can reach, and a controller shaped differently from its four
+code nothing can reach, and a controller shaped differently from its
 neighbours.
 
 Before anything else, get the contract entry: call `get_operation` on the
@@ -43,9 +43,9 @@ choice.
 9. test/<flow>.e2e-spec.ts                           only for authentication, checkout, order history
 ```
 
-Every slice has this shape: the module, the controllers and the DTO at the
-root, every `@Injectable()` provider in `services/`, the response interfaces
-in `types/`. Response types live in `types/<feature>.types.ts`, not in the DTO
+Every slice has this shape: the module with its private CASL registrar, the
+controllers and the DTO at the root, guards in `guards/`, every other
+`@Injectable()` provider in `services/`, the response interfaces in `types/`. Response types live in `types/<feature>.types.ts`, not in the DTO
 file and not in the service. See `SkuResponse` and `SkuDetailResponse` in
 `src/skus/types/skus.types.ts`. The DTO file holds only what comes in; the
 service imports its response types and builds them.

@@ -27,6 +27,12 @@ const MANAGER: SessionPrincipal = {
   sessionId: '22222222-2222-4222-8222-222222222222',
 };
 
+const prismaError = (code: string): Prisma.PrismaClientKnownRequestError =>
+  new Prisma.PrismaClientKnownRequestError('database constraint failed', {
+    code,
+    clientVersion: '6.19.3',
+  });
+
 describe('SkusService', () => {
   const productFindUnique = jest.fn();
   const skuCreate = jest.fn();
@@ -121,6 +127,23 @@ describe('SkusService', () => {
     expect(skuCreate).not.toHaveBeenCalled();
   });
 
+  it('propagates a duplicate skuCode or size/color on create for the global 409 mapping', async () => {
+    const duplicate = prismaError('P2002');
+    skuCreate.mockRejectedValue(duplicate);
+
+    await expect(
+      service.create({
+        productId: SKU.productId,
+        skuCode: SKU.skuCode,
+        size: SKU.size,
+        color: SKU.color,
+        price: '19.90',
+        stockQuantity: 4,
+      }),
+    ).rejects.toBe(duplicate);
+    expect(skuCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves product fallback images for an anonymous caller', async () => {
     skuFindFirst.mockResolvedValue({
       ...SKU,
@@ -208,6 +231,40 @@ describe('SkusService', () => {
     expect(response.imageSource).toBe('sku');
   });
 
+  it('prefers SKU-specific images over product fallback images', async () => {
+    const fallback = {
+      id: 'fallback-image',
+      productId: SKU.productId,
+      url: 'https://cdn.example.com/fallback.webp',
+      s3Key: 'fallback.webp',
+      isFallback: true,
+      isProductPrimary: true,
+      createdAt: NOW,
+      skuAssignments: [],
+    };
+    const image = {
+      id: 'sku-image',
+      productId: SKU.productId,
+      url: 'https://cdn.example.com/sku.webp',
+      s3Key: 'sku.webp',
+      isFallback: false,
+      isProductPrimary: false,
+      createdAt: NOW,
+      skuAssignments: [{ skuId: SKU.id, isPrimary: true }],
+    };
+    skuFindFirst.mockResolvedValue({
+      ...SKU,
+      product: { images: [fallback] },
+      imageAssignments: [{ imageId: image.id, isPrimary: true, image }],
+    });
+
+    const response = await service.get(SKU.id);
+
+    expect(response.images.map(({ id }) => id)).toEqual([image.id]);
+    expect(response.primaryImageId).toBe(image.id);
+    expect(response.imageSource).toBe('sku');
+  });
+
   it('returns no image source when no images are available', async () => {
     skuFindFirst.mockResolvedValue({
       ...SKU,
@@ -259,6 +316,34 @@ describe('SkusService', () => {
     expect(response).not.toHaveProperty('status');
   });
 
+  it('updates only the price as a decimal string and leaves other fields untouched', async () => {
+    skuUpdate.mockResolvedValue({ ...SKU, price: new Prisma.Decimal('21.00') });
+
+    const response = await service.update(SKU.id, { price: '21.00' });
+
+    expect(skuUpdate).toHaveBeenCalledWith({
+      where: { id: SKU.id },
+      data: {
+        skuCode: undefined,
+        size: undefined,
+        color: undefined,
+        price: '21.00',
+        stockQuantity: undefined,
+      },
+    });
+    expect(response.price).toBe('21.00');
+  });
+
+  it('propagates a duplicate skuCode or size/color on update for the global 409 mapping', async () => {
+    const duplicate = prismaError('P2002');
+    skuUpdate.mockRejectedValue(duplicate);
+
+    await expect(
+      service.update(SKU.id, { skuCode: 'CREW-BLUE-L' }),
+    ).rejects.toBe(duplicate);
+    expect(skuUpdate).toHaveBeenCalledTimes(1);
+  });
+
   it('locks the product and evaluates the aggregate stock change in one transaction', async () => {
     totalStock.mockResolvedValueOnce(5).mockResolvedValueOnce(2);
     evaluateStockCycle.mockResolvedValue(['notification-id']);
@@ -298,6 +383,18 @@ describe('SkusService', () => {
     );
     expect(queryRaw).not.toHaveBeenCalled();
     expect(skuUpdate).not.toHaveBeenCalled();
+    expect(evaluateStockCycle).not.toHaveBeenCalled();
+    expect(enqueueNotifications).not.toHaveBeenCalled();
+  });
+
+  it('evaluates no cycle and enqueues nothing when the SKU update rolls back', async () => {
+    const duplicate = prismaError('P2002');
+    skuUpdate.mockRejectedValue(duplicate);
+
+    await expect(service.update(SKU.id, { stockQuantity: 0 })).rejects.toBe(
+      duplicate,
+    );
+    expect(skuUpdate).toHaveBeenCalledTimes(1);
     expect(evaluateStockCycle).not.toHaveBeenCalled();
     expect(enqueueNotifications).not.toHaveBeenCalled();
   });
