@@ -97,7 +97,7 @@ asked for it". A review finding something real does not turn it into a
 requirement.
 
 If you cannot quote a sentence, the answer is to write the scenario into the
-README under _Decisions worth knowing_ or _Known limitations_ — not to build it.
+README under _Main design choices_ or _Known limits_ — not to build it.
 Run `/anchor <thing>` when unsure.
 
 ## Never commit
@@ -123,8 +123,8 @@ hook blocks these commands, so attempting one wastes a turn.
 | Migrate (test DB) | `npm run db:migrate:test`               |
 | Seed              | `npm run db:seed`                       |
 
-`npm run test:e2e` runs `db:migrate:test` first and needs `.env.test` plus a
-running PostgreSQL (`docker compose up -d`). It runs `--runInBand` because the
+`npm run test:e2e` runs `db:migrate:test` first and needs `.env.test` plus
+running PostgreSQL and Redis (`docker compose up -d`). It runs `--runInBand` because the
 specs truncate tables.
 
 Coverage thresholds are enforced: statements 85, branches 75, functions 80,
@@ -160,9 +160,11 @@ mcp/               the contract MCP server used by this repository's tooling
 ```
 
 Every slice that serves contract operations — `auth`, `products`, `skus`,
-`images`, `cart`, `orders`, `payments` — has one shape: the module, its
-controllers and its DTO at the root, every `@Injectable()` provider in
-`services/`, the response interfaces in `types/`. `notifications` and the
+`images`, `cart`, `orders`, `payments` — has one shape: the module with its
+private CASL registrar (`auth` has none), the controllers and the DTO at the
+root, every other `@Injectable()` provider in `services/`, the response
+interfaces in `types/`. `auth` also keeps `guards/` (`JwtAuthGuard`),
+`decorators/` and an `index.ts` barrel. `notifications` and the
 adapters are not slices and keep their own layout. `SessionPrincipal`
 (`src/auth/types/session-principal.ts`) is the user and session a request runs
 as; `@CurrentUser()` yields it.
@@ -173,9 +175,11 @@ specs live in `test/` as `*.e2e-spec.ts` with their own Jest config.
 ## Conventions that are not negotiable
 
 - **Every error is `application/problem+json`.** `ProblemExceptionFilter`
-  catches everything. A response with status ≥ 500 carries no `detail` — the
-  filter discards the original and rebuilds a bare 500, logging the scrubbed
-  stack. Never add a `detail` to a server error.
+  catches everything. A response with status ≥ 500 carries no `detail`: the
+  filter drops the message of a plain `HttpException` at 500 or above, keeping
+  its status (the payment routes' 502), rebuilds anything else — a
+  `ProblemException` at 500 or above included — as a bare 500, and logs the
+  scrubbed stack. Never add a `detail` to a server error.
 - **Money is a string,** `decimal(10,2)`, matching
   `^(0|[1-9]\d{0,7})\.\d{2}$`. Never a JavaScript number, at any layer.
 - **Validation returns 422,** not 400. `ValidationPipe` runs with
