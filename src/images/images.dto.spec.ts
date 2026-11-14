@@ -4,6 +4,7 @@ import { validateSync } from 'class-validator';
 import { UploadProductImageRequest } from './images.dto';
 
 const SKU_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';
+const SECOND_SKU_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
 
 describe('UploadProductImageRequest', () => {
   it('normalizes one multipart SKU field and exact Boolean strings', () => {
@@ -14,6 +15,16 @@ describe('UploadProductImageRequest', () => {
 
     expect(validateSync(input)).toHaveLength(0);
     expect(input).toEqual({ skuIds: [SKU_ID], primary: false });
+  });
+
+  it('accepts a true multipart flag with two distinct SKUs', () => {
+    const input = plainToInstance(UploadProductImageRequest, {
+      skuIds: [SKU_ID, SECOND_SKU_ID],
+      primary: 'true',
+    });
+
+    expect(validateSync(input)).toHaveLength(0);
+    expect(input).toEqual({ skuIds: [SKU_ID, SECOND_SKU_ID], primary: true });
   });
 
   it('accepts an omitted or empty SKU list as a fallback scope', () => {
