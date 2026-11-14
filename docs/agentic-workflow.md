@@ -17,7 +17,7 @@ CLAUDE.md              the working agreement, loaded into every session
   settings.local.json  personal overrides, git-ignored
   commands/            seven slash commands
   agents/              four read-only review subagents
-  skills/              two procedural skills
+  skills/              four procedural skills
   hooks/               four scripts on lifecycle events
   statusline.sh        branch, tree state, contract progress
 .mcp.json              the project's MCP server
@@ -66,9 +66,9 @@ Three refusals are enforced by code, not by convention. A rule written only in a
 document is a request; these are hooks, and they run before the tool call.
 
 **Commits belong to the repository owner.** `.claude/hooks/block-git-write.mjs`
-blocks `git commit`, `push`, `tag`, `reset`, `rebase`, `merge`, `revert`,
-`cherry-pick`, `clean` and `gh pr create`, including when they are hidden behind
-`&&` in a compound command. Read-only git is untouched. The `/pr` command
+blocks `git commit`, `push`, `tag`, `reset`, `rebase`, `clean`, `revert`,
+`cherry-pick`, `merge`, `am` and `apply`, and `gh pr create`, `merge`, `close`
+and `edit`, including when they are hidden behind `&&` in a compound command. Read-only git is untouched. The `/pr` command
 produces a commit breakdown and a pull-request description to hand over instead.
 
 **The real environment files are never opened.**
@@ -92,7 +92,9 @@ not build it".
 CI order and stops at the first failure. `/next-op` and `/op` turn the contract
 into a plan. `/anchor` is the scope gate. `/pr` drafts commits. `/defend` runs a
 cold-call interview on how the code works, which is preparation for a technical
-review rather than a coding aid.
+review rather than a coding aid. `/drill` runs spaced retrieval practice on the
+Claude Code mechanisms this repository uses, drawing every question from a file
+here.
 
 **Subagents** are read-only reviewers, each with one job and its own context:
 `contract-auditor` compares implementation to contract, `scope-warden` finds
@@ -105,7 +107,11 @@ code is a worse auditor.
 conventions, status-code mapping, CASL registrar pattern and test expectations
 for adding one operation; detail sits in `reference/` files that load only when
 that step is reached. `prisma-migration` holds the database procedure, including
-the two things that must not be broken.
+the two things that must not be broken. `structure-audit` lists the folders the
+structure rule does not mark ok, proposes how to regroup each one or records why
+it stays, and writes that as evidence; `structure-check` runs the folder rule,
+the check that the proposed tree exists, and the gate, and combines them into
+one verdict.
 
 **Hooks** cover the lifecycle. Beyond the two refusals above, `SessionStart`
 prints where the work stands — branch, tree state, operations implemented out of

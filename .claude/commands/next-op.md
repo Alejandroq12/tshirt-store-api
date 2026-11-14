@@ -7,8 +7,8 @@ argument-hint: '[tag]'
 Report the next operation to build.
 
 Call `next_unimplemented_operation` from the `tshirt-contract` MCP server. If
-`$ARGUMENTS` names a tag (Likes, Cart, Checkout, Orders, Payments, Webhooks),
-pass it as the `tag` argument. Also call `contract_progress` for the overall
+`$ARGUMENTS` names a tag (Authentication, Products, SKUs, Images, Likes, Cart,
+Checkout, Orders, Payments, Webhooks), pass it as the `tag` argument. Also call `contract_progress` for the overall
 count.
 
 Do not read `api/openapi.yaml` in full to answer this. The MCP server reads it
