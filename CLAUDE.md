@@ -160,9 +160,11 @@ mcp/               the contract MCP server used by this repository's tooling
 ```
 
 Every slice that serves contract operations — `auth`, `products`, `skus`,
-`images`, `cart`, `orders`, `payments` — has one shape: the module, its
-controllers and its DTO at the root, every `@Injectable()` provider in
-`services/`, the response interfaces in `types/`. `notifications` and the
+`images`, `cart`, `orders`, `payments` — has one shape: the module with its
+private CASL registrar (`auth` has none), the controllers and the DTO at the
+root, every other `@Injectable()` provider in `services/`, the response
+interfaces in `types/`. `auth` also keeps `guards/` (`JwtAuthGuard`),
+`decorators/` and an `index.ts` barrel. `notifications` and the
 adapters are not slices and keep their own layout. `SessionPrincipal`
 (`src/auth/types/session-principal.ts`) is the user and session a request runs
 as; `@CurrentUser()` yields it.
