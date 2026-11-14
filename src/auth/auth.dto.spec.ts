@@ -1,7 +1,12 @@
 import { ClassConstructor, plainToInstance } from 'class-transformer';
 import { validateSync, ValidatorOptions } from 'class-validator';
 
-import { SignUpRequest } from './auth.dto';
+import {
+  ForgotPasswordRequest,
+  LoginRequest,
+  RefreshTokenRequest,
+  SignUpRequest,
+} from './auth.dto';
 
 function failingProperties(
   type: ClassConstructor<object>,
@@ -112,4 +117,45 @@ describe('SignUpRequest', () => {
       ),
     ).toEqual(['role']);
   });
+});
+
+describe('LoginRequest', () => {
+  const LOGIN = { email: 'ana@example.com', password: 'secret' };
+
+  it('rejects an empty password', () => {
+    expect(failingProperties(LoginRequest, { ...LOGIN, password: '' })).toEqual(
+      ['password'],
+    );
+  });
+
+  it('accepts a 500-character password, since the contract sets no maximum', () => {
+    expect(
+      failingProperties(LoginRequest, { ...LOGIN, password: 'x'.repeat(500) }),
+    ).toEqual([]);
+  });
+
+  it('rejects a malformed email', () => {
+    expect(
+      failingProperties(LoginRequest, { ...LOGIN, email: 'not-an-email' }),
+    ).toEqual(['email']);
+  });
+});
+
+describe('RefreshTokenRequest', () => {
+  it.each(['', 5])('rejects a refresh token of %p', (refreshToken) => {
+    expect(failingProperties(RefreshTokenRequest, { refreshToken })).toEqual([
+      'refreshToken',
+    ]);
+  });
+});
+
+describe('ForgotPasswordRequest', () => {
+  it.each([{ email: 'not-an-email' }, {}])(
+    'rejects a malformed or missing email: %p',
+    (value) => {
+      expect(failingProperties(ForgotPasswordRequest, value)).toEqual([
+        'email',
+      ]);
+    },
+  );
 });
