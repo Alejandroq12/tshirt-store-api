@@ -282,6 +282,20 @@ describe('StripeWebhookService', () => {
     process.mockRestore();
   });
 
+  it('acknowledges a stored event even when business processing fails', async () => {
+    const process = jest
+      .spyOn(service, 'process')
+      .mockRejectedValue(new Error('Payment product is not active'));
+
+    await expect(
+      service.receive(Buffer.from('{}'), 'signature'),
+    ).resolves.toBeUndefined();
+
+    expect(eventCreate).toHaveBeenCalledTimes(1);
+    expect(process).toHaveBeenCalledWith(STORED_EVENT_ID);
+    process.mockRestore();
+  });
+
   it('locks products and SKUs in ascending order and commits payment atomically', async () => {
     lockedCartItems = [
       { id: 'cart-a', skuId: SKU_A_ID, quantity: 5 },
@@ -370,6 +384,35 @@ describe('StripeWebhookService', () => {
     expect(enqueueNotifications).toHaveBeenCalledWith(['notification-id']);
   });
 
+  it('applies nothing again when a different event repeats an already-paid intent', async () => {
+    const repeatedIntentEvent = {
+      ...paymentIntentEvent,
+      id: 'evt_intent_repeat',
+    } as unknown as Stripe.PaymentIntentSucceededEvent;
+    eventFindUnique.mockResolvedValue(storedEvent(repeatedIntentEvent));
+    orderFindUnique.mockResolvedValue({
+      ...intentOrder,
+      status: OrderStatus.PAID,
+    });
+    lockedCartItems = [{ id: 'cart-a', skuId: SKU_A_ID, quantity: 5 }];
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(cartItemUpdate).not.toHaveBeenCalled();
+    expect(cartItemDeleteMany).not.toHaveBeenCalled();
+    expect(eventUpdate).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID },
+      data: {
+        orderId: ORDER_ID,
+        processedAt: expect.any(Date) as Date,
+        errorMessage: null,
+      },
+    });
+    expect(eventUpdateOutside).not.toHaveBeenCalled();
+  });
+
   it('refuses a succeeded intent that is not the one stored on the order', async () => {
     orderFindUnique.mockResolvedValue({
       ...intentOrder,
@@ -404,6 +447,31 @@ describe('StripeWebhookService', () => {
       data: { errorMessage: `Insufficient stock for SKU ${SKU_B_ID}` },
     });
   });
+
+  it.each([
+    ['inactive', { isActive: false, deletedAt: null }],
+    ['retired', { isActive: false, deletedAt: new Date(EVENT_TIME * 1000) }],
+  ])(
+    'leaves stock, order and event pending when a product became %s after the intent',
+    async (_state, lifecycle) => {
+      skuFindMany.mockResolvedValue([
+        inventory[0],
+        { ...inventory[1], product: { ...inventory[1].product, ...lifecycle } },
+      ]);
+
+      await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+        'Payment product is not active',
+      );
+
+      expect(skuUpdate).not.toHaveBeenCalled();
+      expect(orderUpdateMany).not.toHaveBeenCalled();
+      expect(eventUpdate).not.toHaveBeenCalled();
+      expect(eventUpdateOutside).toHaveBeenCalledWith({
+        where: { id: STORED_EVENT_ID, processedAt: null },
+        data: { errorMessage: 'Payment product is not active' },
+      });
+    },
+  );
 
   it.each([
     ['keeps a positive remainder', 5, 'update', 3],
@@ -519,6 +587,30 @@ describe('StripeWebhookService', () => {
     expect(eventUpdateOutside).toHaveBeenCalled();
   });
 
+  it('leaves a Checkout Session without a buyer email pending', async () => {
+    const anonymousCheckoutEvent = {
+      ...checkoutEvent,
+      data: {
+        object: {
+          ...checkoutEvent.data.object,
+          customer_details: { email: null },
+          customer_email: null,
+        },
+      },
+    } as unknown as Stripe.CheckoutSessionCompletedEvent;
+    eventFindUnique.mockResolvedValue(storedEvent(anonymousCheckoutEvent));
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Checkout Session is missing payment data',
+    );
+    expect(userFindFirst).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Checkout Session is missing payment data' },
+    });
+  });
+
   it('still leaves a Payment Link event pending when the link itself is unknown', async () => {
     eventFindUnique.mockResolvedValue(storedEvent(checkoutEvent));
     orderFindUnique.mockResolvedValue(null);
@@ -564,6 +656,47 @@ describe('StripeWebhookService', () => {
       },
     });
     expect(eventUpdateOutside).not.toHaveBeenCalled();
+  });
+
+  it('settles a succeeded Payment Intent whose metadata order id matches no local order', async () => {
+    orderFindUnique.mockResolvedValue(null);
+
+    await expect(service.process(STORED_EVENT_ID)).resolves.toBeUndefined();
+    expect(orderFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: ORDER_ID } }),
+    );
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(eventUpdate).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID },
+      data: {
+        orderId: null,
+        processedAt: expect.any(Date) as Date,
+        errorMessage:
+          'Payment Intent is not associated with a local order; no business action was applied',
+      },
+    });
+    expect(eventUpdateOutside).not.toHaveBeenCalled();
+  });
+
+  it('still refuses an intent whose order was paid by Payment Link', async () => {
+    orderFindUnique.mockResolvedValue({
+      ...intentOrder,
+      status: OrderStatus.PAID,
+      paymentMethod: PaymentMethod.PAYMENT_LINK,
+      stripePaymentIntentId: null,
+    });
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Payment Intent order was not found',
+    );
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(orderUpdateMany).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Payment Intent order was not found' },
+    });
   });
 
   it('settles the order found by stored intent id when the metadata carries no order id', async () => {

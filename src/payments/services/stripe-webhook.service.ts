@@ -218,12 +218,12 @@ export class StripeWebhookService {
       where: orderId ? { id: orderId } : { stripePaymentIntentId: intent.id },
       select: ORDER_FOR_PAYMENT_SELECT,
     });
-    if (!order && !orderId) {
+    if (!order) {
       return settledWithoutOrder(
         'Payment Intent is not associated with a local order; no business action was applied',
       );
     }
-    if (!order || order.paymentMethod !== PaymentMethod.PAYMENT_INTENT) {
+    if (order.paymentMethod !== PaymentMethod.PAYMENT_INTENT) {
       throw processingError('Payment Intent order was not found');
     }
 
