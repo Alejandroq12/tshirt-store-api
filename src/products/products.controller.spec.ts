@@ -146,4 +146,19 @@ describe('ProductsController', () => {
     ).toThrow(ValidationProblemException);
     expect(products.update).not.toHaveBeenCalled();
   });
+
+  // minProperties: 1 counts a property that is present, so a null description
+  // is a non-empty update.
+  it.each([
+    { categoryId: PRODUCT.categoryId },
+    { name: PRODUCT.name },
+    { description: null },
+    { status: ProductStatus.RETIRED },
+  ])('passes a single-field update to the service: %p', async (input) => {
+    products.update.mockResolvedValue(PRODUCT);
+
+    await controller.updateProduct({ productId: PRODUCT.id }, input);
+
+    expect(products.update).toHaveBeenCalledWith(PRODUCT.id, input);
+  });
 });
