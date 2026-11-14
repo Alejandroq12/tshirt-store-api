@@ -467,6 +467,30 @@ describe('ProductsService', () => {
     expect(response.retiredAt).toBe(NOW.toISOString());
   });
 
+  it('keeps the original timestamp when a retired product is retired again', async () => {
+    const earlier = new Date('2026-08-01T09:30:00.000Z');
+    const retired = { ...PRODUCT, isActive: false, deletedAt: earlier };
+    productFindUnique.mockResolvedValue(retired);
+    productFindUniqueOrThrow.mockResolvedValue(retired);
+
+    const response = await service.update(PRODUCT.id, {
+      status: ProductStatus.RETIRED,
+    });
+
+    expect(productUpdateMany).toHaveBeenCalledWith({
+      where: { id: PRODUCT.id },
+      data: {
+        categoryId: undefined,
+        name: undefined,
+        description: undefined,
+        isActive: false,
+        deletedAt: earlier,
+      },
+    });
+    expect(response.status).toBe(ProductStatus.RETIRED);
+    expect(response.retiredAt).toBe(earlier.toISOString());
+  });
+
   it('returns 404 for a missing product or replacement category', async () => {
     productFindUnique.mockResolvedValueOnce(null);
     await expect(
