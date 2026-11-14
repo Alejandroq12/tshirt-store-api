@@ -470,6 +470,75 @@ describe('StripeWebhookService', () => {
     expect(eventUpdateOutside).toHaveBeenCalled();
   });
 
+  it.each<[string, Stripe.Event, unknown, string]>([
+    [
+      'an intent whose status is not succeeded',
+      {
+        ...paymentIntentEvent,
+        data: {
+          object: { ...paymentIntentEvent.data.object, status: 'processing' },
+        },
+      } as unknown as Stripe.PaymentIntentSucceededEvent,
+      intentOrder,
+      'Payment Intent event is missing payment data',
+    ],
+    [
+      'a paid order that holds a different intent',
+      paymentIntentEvent,
+      {
+        ...intentOrder,
+        status: OrderStatus.PAID,
+        stripePaymentIntentId: 'pi_other',
+      },
+      'Payment Intent order cannot be paid',
+    ],
+    [
+      'a cancelled order',
+      paymentIntentEvent,
+      { ...intentOrder, status: OrderStatus.CANCELLED },
+      'Payment Intent order cannot be paid',
+    ],
+  ])(
+    'leaves the event pending for %s',
+    async (_name, event, order, message) => {
+      eventFindUnique.mockResolvedValue(storedEvent(event));
+      orderFindUnique.mockResolvedValue(order);
+
+      await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(message);
+
+      expect(skuUpdate).not.toHaveBeenCalled();
+      expect(orderUpdateMany).not.toHaveBeenCalled();
+      expect(eventUpdate).not.toHaveBeenCalled();
+      expect(eventUpdateOutside).toHaveBeenCalledWith({
+        where: { id: STORED_EVENT_ID, processedAt: null },
+        data: { errorMessage: message },
+      });
+    },
+  );
+
+  it('rolls back when the order changed between read and update', async () => {
+    orderUpdateMany.mockResolvedValue({ count: 0 });
+    lockedCartItems = [{ id: 'cart-a', skuId: SKU_A_ID, quantity: 5 }];
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Payment Intent order changed concurrently',
+    );
+
+    expect(
+      queryRaw.mock.calls.some(([query]: [Prisma.Sql]) =>
+        query.strings.join('').includes('FROM cart_items'),
+      ),
+    ).toBe(false);
+    expect(cartItemUpdate).not.toHaveBeenCalled();
+    expect(cartItemDeleteMany).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: { errorMessage: 'Payment Intent order changed concurrently' },
+    });
+    expect(enqueueNotifications).not.toHaveBeenCalled();
+  });
+
   it('decrements nothing and leaves the event pending when any line lacks stock', async () => {
     skuFindMany.mockResolvedValue([
       inventory[0],
