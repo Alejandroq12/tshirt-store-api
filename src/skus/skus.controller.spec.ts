@@ -102,4 +102,16 @@ describe('SkusController', () => {
     );
     expect(skus.update).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { skuCode: SKU.skuCode },
+    { size: SKU.size },
+    { color: SKU.color },
+    { price: '0.01' },
+    { stockQuantity: 0 },
+  ])('accepts a single-field update as non-empty: %p', async (update) => {
+    await controller.updateSku({ skuId: SKU.id }, update);
+
+    expect(skus.update).toHaveBeenCalledWith(SKU.id, update);
+  });
 });
