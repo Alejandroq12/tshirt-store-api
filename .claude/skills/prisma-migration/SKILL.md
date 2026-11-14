@@ -5,10 +5,10 @@ description: How this repository changes the database — the Prisma schema, the
 
 # Changing the database
 
-The schema is not only `prisma/schema.prisma`. Eighteen CHECK constraints, seven
-indexes and one trigger live in SQL, because Prisma cannot express any of them.
-A change that ignores the SQL half will pass `prisma validate` and fail at
-runtime.
+The schema is not only `prisma/schema.prisma`. Eighteen CHECK constraints, eight
+partial indexes and one trigger live in SQL, because Prisma cannot express any
+of them. A change that ignores the SQL half will pass `prisma validate` and fail
+at runtime.
 
 Read [`docs/db.dbml`](../../../docs/db.dbml) first — it is the anchor for the
 data model, and a table or column that is not in it needs a requirement before
@@ -16,16 +16,17 @@ it needs a migration.
 
 ## What lives where
 
-| Object                                     | Where                                                        |
-| ------------------------------------------ | ------------------------------------------------------------ |
-| Models, columns, relations, unique indexes | `prisma/schema.prisma`                                       |
-| CHECK constraints (18)                     | `prisma/migrations/20260828002527_constraints/migration.sql` |
-| Partial and supporting indexes (7)         | same file                                                    |
-| The one trigger                            | same file                                                    |
+| Object                                                | Where                                                                      |
+| ----------------------------------------------------- | -------------------------------------------------------------------------- |
+| Models, columns, relations, unique indexes            | `prisma/schema.prisma`                                                     |
+| CHECK constraints (18)                                | `prisma/migrations/20260828002527_constraints/migration.sql`               |
+| Partial and supporting indexes (7)                    | same file                                                                  |
+| The one trigger                                       | same file                                                                  |
+| The eighth partial index (`idx_stock_notice_pending`) | `prisma/migrations/20260905000000_stock_notification_outbox/migration.sql` |
 
 The directory timestamps guarantee order: `..._init` applies, then
-`..._constraints`. `prisma migrate deploy` follows that order in CI and in
-production.
+`..._constraints`, then `..._stock_notification_outbox`. `prisma migrate deploy`
+follows that order in CI and in production.
 
 ## Two things that must not be broken
 

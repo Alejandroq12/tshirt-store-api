@@ -28,7 +28,7 @@ app.useGlobalPipes(
 `unevaluatedProperties: false`. If a DTO accepts unknown fields, the
 implementation is more permissive than the contract.
 
-### `constraints.sql` is applied as a migration
+### The constraints migration holds what Prisma cannot express
 
 Prisma does not support CHECK constraints, partial indexes, or triggers. They
 therefore live in the constraints migration,
@@ -38,7 +38,7 @@ rather than the Prisma schema:
 | Object                                     | Count |
 | ------------------------------------------ | ----- |
 | CHECK constraints                          | 18    |
-| Indexes (3 partial unique, 5 supporting)   | 8     |
+| Partial indexes (3 unique, 4 supporting)   | 7     |
 | Triggers                                   | 1     |
 
 The directory timestamps guarantee the order: `..._init` first, followed by
@@ -84,7 +84,7 @@ of these constraints or an invalid state transition.
 ## 3. What only the application code guarantees
 
 The database cannot prevent the following errors. This is where bugs are most
-likely, so the list also serves as the unit-test checklist for week 3.
+likely, so the list also serves as the unit-test checklist.
 
 | # | Rule | Failure if omitted |
 | - | ---- | ------------------ |
@@ -115,8 +115,8 @@ To prevent the YAML contract from degrading during development:
 "lint:api": "redocly lint api/openapi.yaml"
 ```
 
-Status when the design was delivered: valid, 0 errors, 1 warning
-(`info-license`, intentionally ignored).
+Current status: valid, 0 errors, 0 warnings; `redocly.yaml` turns
+`info-license` off.
 
 ## 5. Interpretations this delivery rests on
 
@@ -166,6 +166,6 @@ applied, and disagree with it on the merits.
 | Routes, schemas, status codes, and examples           | [openapi.yaml](../api/openapi.yaml)                                                                                                         |
 | Tables, columns, relationships, and indexes           | [db.dbml](db.dbml)                                                                                                                          |
 | CHECK constraints, partial indexes, and trigger       | [`prisma/migrations`](../prisma/migrations)                                                                                                  |
-| States, deletion, stock, sessions, and notifications  | [data-lifecycle.md](data-lifecycle.md)                                                                                                      |
-| Internal flows, locks, queue, and monitoring          | [architecture.md](architecture.md)                                                                                                          |
+| States, deletion, stock, locks, sessions, and notifications | [data-lifecycle.md](data-lifecycle.md)                                                                                                |
+| Internal flows, queue, deployment, and monitoring     | [architecture.md](architecture.md)                                                                                                          |
 | Decisions made here rather than stated in a requirement | Section 5 of this file                                                                                                                       |
