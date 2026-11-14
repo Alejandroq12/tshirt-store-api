@@ -86,12 +86,13 @@ src/prisma,mail,storage/ database, SMTP, and S3 adapters
 test/                  end-to-end tests and fixtures
 ```
 
-Each feature slice has the same shape: the module, its controllers and its DTO
-at the root, providers in `services/`, response interfaces in `types/`.
-Controllers handle HTTP. DTOs validate input. Services hold business rules and
-transactions. Guards handle authentication and permissions. Feature modules
-register their CASL rules. Services use Prisma directly, so there is no extra
-repository layer that only repeats Prisma calls.
+Each feature slice has the same shape: the module with its CASL registrar, the
+controllers and the DTO at the root, services in `services/`, response
+interfaces in `types/`; `auth` has no registrar and also keeps `guards/` and
+`decorators/`. Controllers handle HTTP. DTOs validate input. Services hold
+business rules and transactions. Guards handle authentication and permissions.
+Feature modules register their CASL rules. Services use Prisma directly, so
+there is no extra repository layer that only repeats Prisma calls.
 
 ## Request flow
 
@@ -310,9 +311,10 @@ See also [`docs/architecture.md`](docs/architecture.md),
 ## Reorganising a folder
 
 A folder fails the structure rule when it has more than 10 files and more than
-3 name stems at once. A feature slice keeps one shape: the module, the
-controllers and the DTO at the root, providers in `services/`, response
-interfaces in `types/`.
+3 name stems at once. A feature slice keeps one shape: the module with its CASL
+registrar, the controllers and the DTO at the root, services in `services/`,
+response interfaces in `types/`; `auth` has no registrar and also keeps
+`guards/` and `decorators/`.
 
 1. `/structure-audit <name>`: diagnosis and proposal; changes nothing. Use a
    new label per reorganisation so earlier evidence stays as it was.
