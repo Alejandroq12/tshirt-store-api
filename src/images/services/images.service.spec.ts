@@ -193,6 +193,32 @@ describe('ImagesService', () => {
     expect(response.isProductPrimary).toBe(true);
   });
 
+  it('makes the first variant image primary for every supplied SKU', async () => {
+    const response = await service.upload(
+      PRODUCT_ID,
+      { skuIds: [FIRST_SKU_ID, SECOND_SKU_ID] },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expect(assignmentUpdateMany).not.toHaveBeenCalled();
+    expect(imageCreate).toHaveBeenCalledWith({
+      data: {
+        productId: PRODUCT_ID,
+        url: STORED.url,
+        s3Key: STORED.key,
+        isFallback: false,
+        isProductPrimary: false,
+        skuAssignments: {
+          create: [
+            { skuId: FIRST_SKU_ID, isPrimary: true },
+            { skuId: SECOND_SKU_ID, isPrimary: true },
+          ],
+        },
+      },
+    });
+    expect(response.primaryForSkuIds).toEqual([FIRST_SKU_ID, SECOND_SKU_ID]);
+  });
+
   it('creates only variant assignments and fills missing SKU primaries', async () => {
     assignmentFindMany.mockResolvedValue([{ skuId: FIRST_SKU_ID }]);
 
