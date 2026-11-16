@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  type NestInterceptor,
   Param,
   PayloadTooLargeException,
   Post,
@@ -12,6 +14,8 @@ import {
   FileInterceptor,
   type MulterModuleOptions,
 } from '@nestjs/platform-express';
+import { multerExceptions } from '@nestjs/platform-express/multer/multer/multer.constants';
+import { catchError, throwError } from 'rxjs';
 
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import { ValidationProblemException } from '../common/problems';
@@ -43,13 +47,47 @@ const IMAGE_UPLOAD_OPTIONS: MulterModuleOptions = {
   },
 };
 
+// FileInterceptor answers a file part under another name, or a second `file`
+// part, with BadRequestException('Unexpected field - <name>'). The operation
+// declares no 400, so that part is an invalid body and gets the same 422 as a
+// missing `file` part.
+const UNEXPECTED_FILE_PART = `${multerExceptions.LIMIT_UNEXPECTED_FILE} - `;
+
+const unexpectedFilePart = (error: unknown): string | undefined =>
+  error instanceof BadRequestException &&
+  error.message.startsWith(UNEXPECTED_FILE_PART)
+    ? error.message.slice(UNEXPECTED_FILE_PART.length)
+    : undefined;
+
+const UNEXPECTED_FILE_PART_AS_VALIDATION: NestInterceptor = {
+  intercept: (_context, next) =>
+    next.handle().pipe(
+      catchError((error: unknown) => {
+        const field = unexpectedFilePart(error);
+        return throwError(() =>
+          field === undefined
+            ? error
+            : new ValidationProblemException([
+                {
+                  field,
+                  message: 'only one file part, named file, is accepted',
+                },
+              ]),
+        );
+      }),
+    ),
+};
+
 @Controller('products/:productId/images')
 export class ImagesController {
   constructor(private readonly images: ImagesService) {}
 
   @Post()
   @CheckAbilities({ action: 'create', subject: 'ProductImage' })
-  @UseInterceptors(FileInterceptor('file', IMAGE_UPLOAD_OPTIONS))
+  @UseInterceptors(
+    UNEXPECTED_FILE_PART_AS_VALIDATION,
+    FileInterceptor('file', IMAGE_UPLOAD_OPTIONS),
+  )
   uploadProductImage(
     @Param() { productId }: ProductIdParams,
     @Body() input: UploadProductImageRequest,
