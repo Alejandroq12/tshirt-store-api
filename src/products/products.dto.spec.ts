@@ -30,6 +30,26 @@ describe('ListProductsQuery', () => {
     expect(input).toEqual({ limit: 20, offset: 5 });
   });
 
+  it('reads a leading zero as a decimal digit', () => {
+    const input = plainToInstance(ListProductsQuery, {
+      limit: '05',
+      offset: '00',
+    });
+
+    expect(validateSync(input)).toHaveLength(0);
+    expect(input).toEqual({ limit: 5, offset: 0 });
+  });
+
+  // Number() reads all of these as integers; the contract's integer does not.
+  it.each(['0x10', '0b11', '1e1', '', '+5', ' 5', '5.0', '-1'])(
+    'rejects %p as a limit or an offset',
+    (raw) => {
+      expect(
+        failedProperties(ListProductsQuery, { limit: raw, offset: raw }),
+      ).toEqual(['limit', 'offset']);
+    },
+  );
+
   it('accepts a category slug', () => {
     expect(
       failedProperties(ListProductsQuery, {
