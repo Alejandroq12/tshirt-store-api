@@ -13,10 +13,10 @@ flowchart LR
     direction TB
     REPO["GitHub repository"]
     CI["GitHub Actions CI<br/>lint · format · typecheck · OpenAPI<br/>build · unit · PostgreSQL and Redis e2e"]
-    DEPLOY["Heroku deployment<br/>after green CI"]
+    DEPLOY["Manual push to the<br/>Heroku Git remote"]
 
     REPO -->|"push / pull request"| CI
-    CI -.->|"validated revision"| DEPLOY
+    CI -.->|"no automatic deploy"| DEPLOY
   end
 
   subgraph CONSUMERS["API CONSUMERS"]
@@ -84,8 +84,10 @@ flowchart LR
 
 ## Deployment shape
 
-GitHub Actions validates each revision but does not deploy it. A Heroku release
-runs `prisma migrate deploy`, then the `web` process starts `dist/main`.
+GitHub Actions validates each revision but does not deploy it. A revision
+reaches Heroku only when it is pushed to the app's Heroku Git remote. A Heroku
+release runs `prisma migrate deploy`, then the `web` process starts `dist/main`
+on one Basic dyno.
 The [deployed API](https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1) enters
 through the Heroku Router. The configured `TRUST_PROXY` hop count lets the
 password-reset limiter identify the client behind that router.

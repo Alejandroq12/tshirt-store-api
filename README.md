@@ -54,7 +54,7 @@ BullMQ is code inside NestJS. Redis stores its jobs, retries, and schedules.
 Redis does not store orders, stock, or users. PostgreSQL is the source of truth
 and also stores pending webhook events and email work.
 
-The current Heroku app has no separate worker process. Each web dyno handles
+The current Heroku app has no separate worker process. Its one web dyno handles
 HTTP and background jobs. This is simple for the current size. A separate
 worker entry point would allow independent scaling later.
 
@@ -131,19 +131,25 @@ exponential backoff. A scan runs every 30 seconds to recover pending work.
 
 ## Production & Reliability
 
-- **Horizontal scaling:** 2 Heroku Standard-1X web dynos.
-- **Safer deployments:** Heroku Preboot enabled.
-- **Migration safety:** Prisma migrations run in Heroku Release Phase before deployment.
-- **Staging environment:** Dedicated Heroku staging app with isolated PostgreSQL.
-- **Disaster recovery tested:** Production backup successfully restored and verified in staging.
-- **Deployment pipeline:** GitHub -> CI -> Staging -> manual promotion -> Production.
-- **Operational monitoring:** Heroku metrics and alerts cover latency, errors, memory, throughput, and dyno load.
-- **Shared infrastructure:** PostgreSQL as durable state and Redis/BullMQ for background processing.
+Production is one Heroku app, `t-shirt-api`, with one Basic web dyno. This is a
+practice project and the earlier setup cost too much for it, so the deployment
+keeps only what the API needs to run.
 
-The CI workflow verifies code but does not contain the Heroku deployment step.
-Staging deployment and manual promotion are configured outside that workflow.
-Both web dynos also run BullMQ processors, so scaling web adds database and
-Redis connections as well as HTTP capacity.
+- **Migration safety:** Prisma migrations run in Heroku Release Phase before deployment.
+- **Backups:** Heroku Postgres `essential-0` has a daily backup schedule.
+- **Disaster recovery tested:** On 2026-09-09 a production backup was restored and verified in the staging app that existed then.
+- **Shared infrastructure:** PostgreSQL as durable state and Heroku Redis `mini` for BullMQ background processing.
+- **Monitoring:** Heroku application metrics in the dashboard. A Basic dyno keeps 24 hours of them at 10-minute resolution and cannot use Heroku threshold alerts.
+
+To cut cost, the deployment gave up a second web dyno, Heroku Preboot, the
+staging app with its own PostgreSQL and Redis, and the pipeline that promoted
+staging to production. Basic dynos do not support Preboot, so a deploy or
+restart has a short gap in service.
+
+The CI workflow verifies code and contains no deployment step. A revision
+reaches production only when it is pushed to the app's Heroku Git remote;
+nothing deploys from GitHub automatically. The web dyno also runs the BullMQ
+processors, so HTTP and background jobs share it.
 
 The Heroku process types are:
 
@@ -155,9 +161,6 @@ web: node dist/main.js
 Production is at <https://t-shirt-api-2e742ec1e3f1.herokuapp.com/v1>. There is
 no `/` route. Use `/products?limit=20&offset=0` to check it. Production email
 uses Mailtrap with the verified `quezadajulio.com` domain.
-
-Staging check: <https://t-shirt-api-staging-57d7357dcda2.herokuapp.com/v1/products?limit=20&offset=0>.
-It uses isolated test data and may be reset.
 
 ## Local setup
 
@@ -269,7 +272,7 @@ Editor.
 - PostgreSQL constraints and locks protect important rules.
 - Carts do not reserve stock. Payment checks it again under locks.
 - Orders freeze purchase data. Pending jobs are stored before processing.
-- BullMQ processors share web dynos for the current deployment.
+- BullMQ processors share the web dyno in the current deployment.
 - Money stays as decimal strings; invalid input returns Problem Details with 422.
 
 ## Known limits
@@ -288,8 +291,8 @@ Editor.
 - Password-reset rate limits are stored per web dyno, not shared.
 - Page size has no maximum because the current contract defines none.
 - File upload checks declared MIME and size, not file magic bytes or malware.
-- There is no app health endpoint or tracing. Alerts are configured in Heroku,
-  not inside the NestJS application.
+- There is no app health endpoint or tracing. Heroku threshold alerts are not
+  available on Basic dynos; metrics are in the Heroku dashboard.
 - `npm audit` is not clean. On 2026-09-09 it reported 11 high dependency
   nodes, or 9 with dev dependencies omitted. Recheck and upgrade safely before
   release. Do not apply suggested major downgrades without testing.
