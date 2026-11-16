@@ -37,8 +37,13 @@ export class ImagesService {
     });
 
     try {
-      const persisted = await this.prisma.$transaction((transaction) =>
-        skuIds.length === 0
+      const persisted = await this.prisma.$transaction(async (transaction) => {
+        // Two uploads for one product must not both find no primary and both insert one.
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT id FROM products WHERE id = ${productId}::uuid FOR UPDATE`,
+        );
+
+        return skuIds.length === 0
           ? this.createFallback(
               transaction,
               productId,
@@ -53,8 +58,8 @@ export class ImagesService {
               stored.key,
               stored.url,
               input.primary === true,
-            ),
-      );
+            );
+      });
 
       return {
         id: persisted.image.id,

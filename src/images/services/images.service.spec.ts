@@ -22,6 +22,7 @@ describe('ImagesService', () => {
   const imageCreate = jest.fn();
   const assignmentFindMany = jest.fn();
   const assignmentUpdateMany = jest.fn();
+  const queryRaw = jest.fn();
   const transactionClient = {
     productImage: {
       findFirst: imageFindFirst,
@@ -32,6 +33,7 @@ describe('ImagesService', () => {
       findMany: assignmentFindMany,
       updateMany: assignmentUpdateMany,
     },
+    $queryRaw: queryRaw,
   };
   const transaction = jest.fn(
     (callback: (client: typeof transactionClient) => unknown) =>
@@ -58,6 +60,7 @@ describe('ImagesService', () => {
     imageUpdateMany.mockResolvedValue({ count: 1 });
     assignmentFindMany.mockResolvedValue([]);
     assignmentUpdateMany.mockResolvedValue({ count: 1 });
+    queryRaw.mockResolvedValue([]);
     storageUpload.mockResolvedValue(STORED);
     storageRemove.mockResolvedValue(undefined);
     imageCreate.mockImplementation(
