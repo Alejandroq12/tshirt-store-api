@@ -314,6 +314,35 @@ describe('ImagesService', () => {
     expect(response.primaryForSkuIds).toEqual([FIRST_SKU_ID, SECOND_SKU_ID]);
   });
 
+  it('locks the product before reading the current SKU primaries', async () => {
+    await service.upload(
+      PRODUCT_ID,
+      { skuIds: [FIRST_SKU_ID, SECOND_SKU_ID] },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expectProductLock();
+    expect(storageUpload.mock.invocationCallOrder[0]).toBeLessThan(
+      queryRaw.mock.invocationCallOrder[0],
+    );
+    expect(queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      assignmentFindMany.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('locks the product before demoting the SKU primaries', async () => {
+    await service.upload(
+      PRODUCT_ID,
+      { skuIds: [FIRST_SKU_ID, SECOND_SKU_ID], primary: true },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expectProductLock();
+    expect(queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      assignmentUpdateMany.mock.invocationCallOrder[0],
+    );
+  });
+
   it('removes the uploaded object when database persistence fails', async () => {
     const failure = new Error('database failed');
     transaction.mockRejectedValueOnce(failure);
