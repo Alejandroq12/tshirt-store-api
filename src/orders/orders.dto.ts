@@ -1,13 +1,13 @@
-import { Type } from 'class-transformer';
 import {
   IsEnum,
   IsISO8601,
-  IsInt,
   IsOptional,
   IsUUID,
   Matches,
   Min,
 } from 'class-validator';
+
+import { IntegerQuery } from '../common/validation/integer-query.decorator';
 
 const AMOUNT_PATTERN = /^(0|[1-9]\d{0,7})\.\d{2}$/;
 
@@ -38,13 +38,11 @@ export class OrderIdParams {
 }
 
 export class ListOrdersQuery {
-  @Type(() => Number)
-  @IsInt()
+  @IntegerQuery()
   @Min(1)
   limit!: number;
 
-  @Type(() => Number)
-  @IsInt()
+  @IntegerQuery()
   @Min(0)
   offset!: number;
 }

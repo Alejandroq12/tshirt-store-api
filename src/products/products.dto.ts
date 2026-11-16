@@ -1,8 +1,6 @@
-import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
-  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -11,6 +9,7 @@ import {
   MinLength,
 } from 'class-validator';
 
+import { IntegerQuery } from '../common/validation/integer-query.decorator';
 import { OptionalProperty } from '../common/validation/optional-property.decorator';
 
 export enum ProductStatus {
@@ -20,13 +19,11 @@ export enum ProductStatus {
 }
 
 export class ListProductsQuery {
-  @Type(() => Number)
-  @IsInt()
+  @IntegerQuery()
   @Min(1)
   limit!: number;
 
-  @Type(() => Number)
-  @IsInt()
+  @IntegerQuery()
   @Min(0)
   offset!: number;
 

@@ -1,9 +1,54 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 
-import { ListMyOrdersQuery } from './orders.dto';
+import { ListMyOrdersQuery, ListOrdersQuery } from './orders.dto';
 
 const PAGE = { limit: '10', offset: '0' };
+
+// Number() reads all of these as integers; the contract's integer does not.
+const NON_DECIMAL = ['0x10', '0b11', '1e1', '', '+5', ' 5', '5.0', '-1'];
+
+const failedProperties = (
+  cls: typeof ListOrdersQuery,
+  value: object,
+): string[] =>
+  validateSync(plainToInstance(cls, value)).map(({ property }) => property);
+
+describe.each([
+  ['ListOrdersQuery', ListOrdersQuery],
+  ['ListMyOrdersQuery', ListMyOrdersQuery],
+])('%s page', (_name, cls) => {
+  it.each([
+    [
+      { limit: '20', offset: '5' },
+      { limit: 20, offset: 5 },
+    ],
+    [
+      { limit: '05', offset: '00' },
+      { limit: 5, offset: 0 },
+    ],
+  ])('turns %p into %p', (raw, expected) => {
+    const input = plainToInstance(cls, raw);
+
+    expect(validateSync(input)).toHaveLength(0);
+    expect(input).toEqual(expected);
+  });
+
+  it.each(NON_DECIMAL)('rejects %p as a limit or an offset', (raw) => {
+    expect(failedProperties(cls, { limit: raw, offset: raw })).toEqual([
+      'limit',
+      'offset',
+    ]);
+  });
+
+  it.each([
+    [{ limit: '0', offset: '0' }, 'limit'],
+    [{ offset: '0' }, 'limit'],
+    [{ limit: '20' }, 'offset'],
+  ])('rejects an out-of-range or missing page value: %p', (raw, failed) => {
+    expect(failedProperties(cls, raw)).toEqual([failed]);
+  });
+});
 
 describe('ListMyOrdersQuery', () => {
   it.each([
