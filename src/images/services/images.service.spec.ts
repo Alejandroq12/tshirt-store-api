@@ -1,5 +1,5 @@
 import { Logger, NotFoundException } from '@nestjs/common';
-import type { ProductImage } from '@prisma/client';
+import type { Prisma, ProductImage } from '@prisma/client';
 
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { S3StorageService } from '../../storage/s3-storage.service';
@@ -80,6 +80,16 @@ describe('ImagesService', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
+
+  const expectProductLock = (): void => {
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const [lock] = queryRaw.mock.calls[0] as [Prisma.Sql];
+    expect(lock.strings.join('')).toContain(
+      'SELECT id FROM products WHERE id = ',
+    );
+    expect(lock.strings.join('')).toContain('FOR UPDATE');
+    expect(lock.values).toEqual([PRODUCT_ID]);
+  };
 
   it('does not upload when the product is missing', async () => {
     productFindUnique.mockResolvedValue(null);
@@ -198,6 +208,35 @@ describe('ImagesService', () => {
       data: { isProductPrimary: false },
     });
     expect(response.isProductPrimary).toBe(true);
+  });
+
+  it('locks the product after storing the object and before reading the fallback primary', async () => {
+    await service.upload(
+      PRODUCT_ID,
+      {},
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expectProductLock();
+    expect(storageUpload.mock.invocationCallOrder[0]).toBeLessThan(
+      queryRaw.mock.invocationCallOrder[0],
+    );
+    expect(queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      imageFindFirst.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('locks the product before demoting the fallback primary', async () => {
+    await service.upload(
+      PRODUCT_ID,
+      { primary: true },
+      { body: Buffer.from('image'), contentType: 'image/png' },
+    );
+
+    expectProductLock();
+    expect(queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      imageUpdateMany.mock.invocationCallOrder[0],
+    );
   });
 
   it('makes the first variant image primary for every supplied SKU', async () => {
