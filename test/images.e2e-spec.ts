@@ -342,4 +342,55 @@ describe('Product images (e2e)', () => {
       404,
     );
   });
+
+  it('answers an unexpected or repeated file part with 422', async () => {
+    const product = await createProduct();
+    const manager = await login('MANAGER');
+    const upload = () =>
+      request(app.getHttpServer())
+        .post(`/v1/products/${product.id}/images`)
+        .set('Authorization', `Bearer ${manager.accessToken}`);
+    const image = { filename: 'shirt.png', contentType: 'image/png' };
+
+    const cases = [
+      {
+        field: 'photo',
+        response: await upload()
+          .attach('photo', Buffer.from('png'), image)
+          .expect(422),
+      },
+      {
+        field: 'photo',
+        response: await upload()
+          .attach('file', Buffer.from('png'), image)
+          .attach('photo', Buffer.from('png'), image)
+          .expect(422),
+      },
+      {
+        field: 'file',
+        response: await upload()
+          .attach('file', Buffer.from('png'), image)
+          .attach('file', Buffer.from('png'), image)
+          .expect(422),
+      },
+    ];
+
+    for (const { field, response } of cases) {
+      expect(response.headers['content-type']).toContain(
+        'application/problem+json',
+      );
+      expect(response.body).toMatchObject({
+        type: 'about:blank',
+        title: 'Unprocessable Content',
+        status: 422,
+      });
+      expect((response.body as ValidationBody).errors).toEqual([
+        { field, message: 'only one file part, named file, is accepted' },
+      ]);
+    }
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(
+      await prisma.productImage.count({ where: { productId: product.id } }),
+    ).toBe(0);
+  });
 });
