@@ -224,7 +224,7 @@ describe('validateEnvironment', () => {
       expect(() => validateEnvironment(completeEnvironment())).not.toThrow();
     });
 
-    it('still allows a Stripe test key, which a staging deploy needs', () => {
+    it('still allows a Stripe test key in production', () => {
       expect(() =>
         validateEnvironment(
           production({
