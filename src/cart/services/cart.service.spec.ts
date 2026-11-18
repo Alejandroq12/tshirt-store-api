@@ -7,6 +7,16 @@ import type { EnvironmentVariables } from '../../config/env.validation';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { CartService } from './cart.service';
 
+const LINE_TOTAL_PROBLEM = {
+  status: 422,
+  errors: [
+    {
+      field: 'quantity',
+      message: 'Quantity times the unit price must not exceed 99999999.99.',
+    },
+  ],
+};
+
 const NOW = new Date('2026-09-03T12:00:00.000Z');
 const CART_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ITEM_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -86,9 +96,12 @@ describe('CartService', () => {
       items: [],
       updatedAt: NOW,
     });
-    skuFindFirst.mockResolvedValue({ id: SKU_ID });
+    skuFindFirst.mockResolvedValue({ id: SKU_ID, price: ITEM.sku.price });
     itemCreate.mockResolvedValue(ITEM);
-    itemFindFirst.mockResolvedValue({ id: ITEM_ID });
+    itemFindFirst.mockResolvedValue({
+      id: ITEM_ID,
+      sku: { price: ITEM.sku.price },
+    });
     itemUpdate.mockResolvedValue(ITEM);
     itemDeleteMany.mockResolvedValue({ count: 1 });
   });
@@ -211,7 +224,7 @@ describe('CartService', () => {
         id: SKU_ID,
         product: { isActive: true, deletedAt: null },
       },
-      select: { id: true },
+      select: { id: true, price: true },
     });
     expect(cartUpsert).toHaveBeenCalledTimes(1);
     expect(itemCreate).toHaveBeenCalledWith(
@@ -245,6 +258,30 @@ describe('CartService', () => {
     expect(itemCreate).not.toHaveBeenCalled();
   });
 
+  it('adds an item whose line total is exactly the largest amount', async () => {
+    skuFindFirst.mockResolvedValue({
+      id: SKU_ID,
+      price: new Prisma.Decimal('33333333.33'),
+    });
+
+    await service.addItem(CLIENT, { skuId: SKU_ID, quantity: 3 });
+
+    expect(itemCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses an item whose line total the money format cannot hold', async () => {
+    skuFindFirst.mockResolvedValue({
+      id: SKU_ID,
+      price: new Prisma.Decimal('19.99'),
+    });
+
+    await expect(
+      service.addItem(CLIENT, { skuId: SKU_ID, quantity: 6_000_000 }),
+    ).rejects.toMatchObject({ problem: LINE_TOTAL_PROBLEM });
+    expect(cartUpsert).not.toHaveBeenCalled();
+    expect(itemCreate).not.toHaveBeenCalled();
+  });
+
   it('propagates a duplicate SKU constraint for the global 409 mapping', async () => {
     const duplicate = prismaError('P2002');
     itemCreate.mockRejectedValue(duplicate);
@@ -273,7 +310,7 @@ describe('CartService', () => {
     });
     expect(itemFindFirst).toHaveBeenCalledWith({
       where: { id: ITEM_ID, cart: { clientId: CLIENT.id } },
-      select: { id: true },
+      select: { id: true, sku: { select: { price: true } } },
     });
     expect(itemUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -281,6 +318,29 @@ describe('CartService', () => {
         data: { quantity: 3 },
       }),
     );
+  });
+
+  it('updates an item to a line total of exactly the largest amount', async () => {
+    itemFindFirst.mockResolvedValue({
+      id: ITEM_ID,
+      sku: { price: new Prisma.Decimal('0.99') },
+    });
+
+    await service.updateItem(CLIENT, ITEM_ID, { quantity: 101_010_101 });
+
+    expect(itemUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses an update whose line total the money format cannot hold', async () => {
+    itemFindFirst.mockResolvedValue({
+      id: ITEM_ID,
+      sku: { price: new Prisma.Decimal('0.99') },
+    });
+
+    await expect(
+      service.updateItem(CLIENT, ITEM_ID, { quantity: 101_010_102 }),
+    ).rejects.toMatchObject({ problem: LINE_TOTAL_PROBLEM });
+    expect(itemUpdate).not.toHaveBeenCalled();
   });
 
   it("hides another client's item on update", async () => {
