@@ -271,6 +271,39 @@ describe('ProblemExceptionFilter', () => {
     });
   });
 
+  describe('rejections from the body parser', () => {
+    // The shape http-errors gives body-parser's errors.
+    const parserError = (
+      status: number,
+      message: string,
+      type: string,
+    ): Error =>
+      Object.assign(new Error(message), {
+        expose: status < 500,
+        status,
+        statusCode: status,
+        type,
+      });
+
+    it('keeps the 413 of a JSON body over the size limit', () => {
+      const { host, captured } = capture();
+
+      filter.catch(
+        parserError(413, 'request entity too large', 'entity.too.large'),
+        host,
+      );
+
+      expect(captured.status).toBe(413);
+      expect(captured.headers['content-type']).toBe('application/problem+json');
+      expect(captured.body).toEqual({
+        type: PROBLEM_TYPE.BLANK,
+        title: 'Content Too Large',
+        status: 413,
+        instance: '/v1/orders',
+      });
+    });
+  });
+
   describe('database constraints the design relies on', () => {
     const prismaError = (code: string): Prisma.PrismaClientKnownRequestError =>
       new Prisma.PrismaClientKnownRequestError('constraint failed', {
