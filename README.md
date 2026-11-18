@@ -296,6 +296,10 @@ Editor.
 - `npm audit` is not clean. On 2026-09-09 it reported 11 high dependency
   nodes, or 9 with dev dependencies omitted. Recheck and upgrade safely before
   release. Do not apply suggested major downgrades without testing.
+- Errors raised while parsing a request keep their HTTP status, which most
+  operations do not declare: malformed JSON or multipart and a bad
+  percent-encoding in a path answer 400, a JSON body over 100 kB answers 413,
+  and an unsupported charset answers 415.
 
 ## Agent foundation
 
