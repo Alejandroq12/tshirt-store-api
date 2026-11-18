@@ -28,6 +28,10 @@ function emailOfLength(length: number): string {
   return `${head}${'d'.repeat(length - head.length - '.com'.length)}.com`;
 }
 
+// validator.js isLength counts each pair as one character; the contract's
+// maxLength and the varchar column count two code points.
+const VARIATION_PAIR = 'A\uFE0F';
+
 const SIGN_UP = {
   email: 'ana@example.com',
   password: 'x'.repeat(8),
@@ -78,6 +82,39 @@ describe('SignUpRequest', () => {
       }
     },
   );
+
+  it.each(['firstName', 'lastName'])(
+    'measures a %s in code points, accepting 100 and rejecting 102',
+    (property) => {
+      expect(
+        failingProperties(SignUpRequest, {
+          ...SIGN_UP,
+          [property]: VARIATION_PAIR.repeat(50),
+        }),
+      ).toEqual([]);
+      expect(
+        failingProperties(SignUpRequest, {
+          ...SIGN_UP,
+          [property]: VARIATION_PAIR.repeat(51),
+        }),
+      ).toEqual([property]);
+    },
+  );
+
+  it('measures a password in code points, accepting 128 and rejecting 130', () => {
+    expect(
+      failingProperties(SignUpRequest, {
+        ...SIGN_UP,
+        password: VARIATION_PAIR.repeat(64),
+      }),
+    ).toEqual([]);
+    expect(
+      failingProperties(SignUpRequest, {
+        ...SIGN_UP,
+        password: VARIATION_PAIR.repeat(65),
+      }),
+    ).toEqual(['password']);
+  });
 
   it('rejects a malformed email', () => {
     expect(
@@ -183,6 +220,21 @@ describe.each([
   it.each([7, 129])('rejects a newPassword of %i characters', (length) => {
     expect(
       failingProperties(type, { ...body, newPassword: 'x'.repeat(length) }),
+    ).toEqual(['newPassword']);
+  });
+
+  it('measures a newPassword in code points, accepting 128 and rejecting 130', () => {
+    expect(
+      failingProperties(type, {
+        ...body,
+        newPassword: VARIATION_PAIR.repeat(64),
+      }),
+    ).toEqual([]);
+    expect(
+      failingProperties(type, {
+        ...body,
+        newPassword: VARIATION_PAIR.repeat(65),
+      }),
     ).toEqual(['newPassword']);
   });
 

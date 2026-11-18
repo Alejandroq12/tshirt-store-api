@@ -153,6 +153,22 @@ describe('ImagesController', () => {
     });
   });
 
+  it('rejects a text part over the field size limit as validation failure', async () => {
+    const rejection = throughUploadInterceptor(() =>
+      throwError(() =>
+        multerError(multerExceptions.LIMIT_FIELD_VALUE, 'skuIds'),
+      ),
+    );
+
+    await expect(rejection).rejects.toBeInstanceOf(ValidationProblemException);
+    await expect(rejection).rejects.toMatchObject({
+      problem: {
+        status: 422,
+        errors: [{ field: 'skuIds', message: 'value is too long' }],
+      },
+    });
+  });
+
   it.each([
     [
       'an oversized file',
