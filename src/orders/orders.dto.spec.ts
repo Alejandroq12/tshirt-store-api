@@ -113,4 +113,58 @@ describe('ListMyOrdersQuery', () => {
       'to',
     ]);
   });
+
+  it.each([
+    '0100-01-01T00:00:00+23:59',
+    '9999-12-31T23:59:59.999Z',
+    '9999-12-31T23:59:59+23:59',
+  ])('accepts %s, whose UTC instant has a four-digit year', (bound) => {
+    const input = plainToInstance(ListMyOrdersQuery, {
+      ...PAGE,
+      from: bound,
+      to: bound,
+    });
+
+    expect(validateSync(input)).toHaveLength(0);
+  });
+
+  it.each([
+    ['9999-12-31T23:59:59-23:59', '+010000-01-01T23:58:59.000Z'],
+    ['9999-12-31T23:59:59.999-00:01', '+010000-01-01T00:00:59.999Z'],
+  ])('rejects %s, which is %s in UTC, as a from or to bound', (bound, utc) => {
+    expect(new Date(bound).toISOString()).toBe(utc);
+    const input = plainToInstance(ListMyOrdersQuery, {
+      ...PAGE,
+      from: bound,
+      to: bound,
+    });
+
+    expect(
+      validateSync(input).map(({ property, constraints }) => [
+        property,
+        constraints,
+      ]),
+    ).toEqual(
+      ['from', 'to'].map((property) => [
+        property,
+        {
+          inFourDigitUtcYear: `${property} must fall within the years 0000 to 9999 in UTC.`,
+        },
+      ]),
+    );
+  });
+
+  it('rejects a bound whose UTC instant falls before year 0000', () => {
+    const bound = '0000-01-01T00:00:00+00:01';
+    expect(new Date(bound).toISOString()).toBe('-000001-12-31T23:59:00.000Z');
+
+    const [from] = validateSync(
+      plainToInstance(ListMyOrdersQuery, { ...PAGE, from: bound }),
+    );
+
+    expect(from.constraints).toHaveProperty(
+      'inFourDigitUtcYear',
+      'from must fall within the years 0000 to 9999 in UTC.',
+    );
+  });
 });
