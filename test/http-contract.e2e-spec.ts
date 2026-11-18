@@ -68,6 +68,24 @@ describe('HTTP contract (e2e)', () => {
         ),
       ).toEqual([]);
     });
+
+    it('keeps the 413 of a JSON body over the parser limit', async () => {
+      const response = await post('/v1/probe', {
+        email: 'ana@example.com',
+        quantity: 2,
+        padding: 'a'.repeat(100 * 1024),
+      }).expect(413);
+
+      expect(response.headers['content-type']).toContain(
+        'application/problem+json',
+      );
+      expect(response.body).toEqual({
+        type: 'about:blank',
+        title: 'Content Too Large',
+        status: 413,
+        instance: '/v1/probe',
+      });
+    });
   });
 
   describe('an invalid body returns 422, not 400', () => {
