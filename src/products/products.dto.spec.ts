@@ -19,6 +19,10 @@ const CREATE = { categoryId: CATEGORY_ID, name: 'Classic Crew' };
 const failedProperties = (cls: RequestClass, value: object): string[] =>
   validateSync(plainToInstance(cls, value)).map(({ property }) => property);
 
+// validator.js isLength counts each pair as one character; the contract's
+// maxLength and the varchar(200) column count two code points.
+const VARIATION_PAIR = 'A\uFE0F';
+
 describe('ListProductsQuery', () => {
   it('turns the query-string page values into integers', () => {
     const input = plainToInstance(ListProductsQuery, {
@@ -104,6 +108,20 @@ describe('CreateProductRequest', () => {
     [{ ...CREATE, description: 5 }, 'description'],
   ])('rejects an invalid product: %p', (value, property) => {
     expect(failedProperties(CreateProductRequest, value)).toEqual([property]);
+  });
+});
+
+describe.each([
+  { type: CreateProductRequest, body: CREATE },
+  { type: UpdateProductRequest, body: {} },
+])('$type.name name length', ({ type, body }) => {
+  it('measures it in code points, accepting 200 and rejecting 202', () => {
+    expect(
+      failedProperties(type, { ...body, name: VARIATION_PAIR.repeat(100) }),
+    ).toEqual([]);
+    expect(
+      failedProperties(type, { ...body, name: VARIATION_PAIR.repeat(101) }),
+    ).toEqual(['name']);
   });
 });
 
