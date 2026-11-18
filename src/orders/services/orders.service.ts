@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 
 import type { SessionPrincipal } from '../../auth/types/session-principal';
+import { exceedsMaxAmount, MAX_AMOUNT } from '../../common/money/max-amount';
 import {
   PROBLEM_TYPE,
   ProblemException,
@@ -105,6 +106,17 @@ const pendingOrderProblem = (): ProblemException =>
     status: HttpStatus.CONFLICT,
   });
 
+// The contract's 409 for this operation names only empty-cart and
+// pending-order-exists, and neither is true of a cart too large to order, so
+// this is the generic about:blank conflict with a detail rather than a new URN.
+const orderTotalProblem = (): ProblemException =>
+  new ProblemException({
+    type: PROBLEM_TYPE.BLANK,
+    title: 'Conflict',
+    status: HttpStatus.CONFLICT,
+    detail: `The cart total exceeds ${MAX_AMOUNT}, the largest amount an order can hold.`,
+  });
+
 @Injectable()
 export class OrdersService {
   private readonly currency: string;
@@ -155,6 +167,10 @@ export class OrdersService {
         (total, item) => total.add(item.lineTotal),
         new Prisma.Decimal('0.00'),
       );
+
+      // numeric(10,2) cannot store it and PostgreSQL would refuse the insert.
+      // Every line is positive, so a line past the bound takes the total too.
+      if (exceedsMaxAmount(totalAmount)) throw orderTotalProblem();
 
       try {
         return await transaction.order.create({
