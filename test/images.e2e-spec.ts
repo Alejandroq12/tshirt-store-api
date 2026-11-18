@@ -393,4 +393,27 @@ describe('Product images (e2e)', () => {
       await prisma.productImage.count({ where: { productId: product.id } }),
     ).toBe(0);
   });
+
+  it('answers a text part over the field size limit with 422', async () => {
+    const product = await createProduct();
+    const manager = await login('MANAGER');
+
+    const response = await request(app.getHttpServer())
+      .post(`/v1/products/${product.id}/images`)
+      .set('Authorization', `Bearer ${manager.accessToken}`)
+      .attach('file', Buffer.from('png'), {
+        filename: 'shirt.png',
+        contentType: 'image/png',
+      })
+      .field('skuIds', 'a'.repeat(1024 * 1024 + 1))
+      .expect(422);
+
+    expect(response.headers['content-type']).toContain(
+      'application/problem+json',
+    );
+    expect((response.body as ValidationBody).errors).toEqual([
+      { field: 'skuIds', message: 'value is too long' },
+    ]);
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
 });
