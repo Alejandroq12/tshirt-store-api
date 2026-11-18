@@ -338,6 +338,48 @@ describe('OrdersService', () => {
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
+  const cartPricedAt = (...prices: string[]) => ({
+    items: CART.items.map((item, index) => ({
+      ...item,
+      quantity: 1,
+      sku: { ...item.sku, price: new Prisma.Decimal(prices[index]) },
+    })),
+  });
+
+  it('creates an order whose total is exactly the largest amount', async () => {
+    cartFindUnique.mockResolvedValue(cartPricedAt('99999999.98', '0.01'));
+
+    await service.createFromCart(CLIENT);
+
+    const [createInput] = orderCreate.mock.calls[0];
+    expect((createInput.data.totalAmount as Prisma.Decimal).toFixed(2)).toBe(
+      '99999999.99',
+    );
+  });
+
+  it.each([
+    ['the order total', ['99999999.99', '0.01']],
+    ['a line total', ['50000000.00', '0.01'], 2],
+  ])(
+    'refuses a cart when %s exceeds the largest amount, before inserting',
+    async (_name, prices, quantity = 1) => {
+      const cart = cartPricedAt(...prices);
+      cart.items[0].quantity = quantity;
+      cartFindUnique.mockResolvedValue(cart);
+
+      await expect(service.createFromCart(CLIENT)).rejects.toMatchObject({
+        problem: {
+          type: PROBLEM_TYPE.BLANK,
+          title: 'Conflict',
+          status: 409,
+          detail:
+            'The cart total exceeds 99999999.99, the largest amount an order can hold.',
+        },
+      });
+      expect(orderCreate).not.toHaveBeenCalled();
+    },
+  );
+
   it('converts a concurrent pending-order collision to the typed problem', async () => {
     orderCreate.mockRejectedValue(prismaError('P2002'));
 

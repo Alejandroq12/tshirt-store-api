@@ -289,7 +289,16 @@ Editor.
 - Stock email delivery is at least once, so a crash can cause a duplicate.
 - Heroku Redis TLS is encrypted but does not verify the certificate chain.
 - Password-reset rate limits are stored per web dyno, not shared.
-- Page size has no maximum because the current contract defines none.
+- Page size has no maximum because the current contract defines none. A
+  `limit` or `offset` above 9007199254740991 (2^53 − 1) is rejected with 422,
+  because no JavaScript number holds it exactly.
+- `GET /v1/me/cart` can still show a `lineTotal` or `subtotalAmount` above
+  `99999999.99`, outside the contract's amount pattern. Adding or updating an
+  item bounds only that line at that moment; the subtotal of several lines, or
+  a line after a price rise, is not bounded. Such a cart cannot become an
+  order: `POST /v1/orders` answers 409 with the generic `about:blank` problem,
+  because the operation's 409 declares only `empty-cart` and
+  `pending-order-exists`.
 - File upload checks declared MIME and size, not file magic bytes or malware.
 - There is no app health endpoint or tracing. Heroku threshold alerts are not
   available on Basic dynos; metrics are in the Heroku dashboard.

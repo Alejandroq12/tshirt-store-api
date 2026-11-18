@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 
 import type { SessionPrincipal } from '../../auth/types/session-principal';
+import { exceedsMaxAmount, MAX_AMOUNT } from '../../common/money/max-amount';
+import { ValidationProblemException } from '../../common/problems';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CartItemCreateRequest, CartItemUpdateRequest } from '../cart.dto';
@@ -42,6 +44,23 @@ const isUniqueViolation = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
   error.code === 'P2002';
 
+// A line total above the largest amount breaks the contract's PositiveAmount
+// on lineTotal and could never become an order line. Prices are read again
+// whenever the cart is shown, so a later price rise can still pass it.
+const requireLineTotalWithinMax = (
+  price: Prisma.Decimal,
+  quantity: number,
+): void => {
+  if (exceedsMaxAmount(price.mul(quantity))) {
+    throw new ValidationProblemException([
+      {
+        field: 'quantity',
+        message: `Quantity times the unit price must not exceed ${MAX_AMOUNT}.`,
+      },
+    ]);
+  }
+};
+
 @Injectable()
 export class CartService {
   private readonly currency: string;
@@ -72,10 +91,11 @@ export class CartService {
         id: input.skuId,
         product: { isActive: true, deletedAt: null },
       },
-      select: { id: true },
+      select: { id: true, price: true },
     });
 
     if (!sku) throw new NotFoundException();
+    requireLineTotalWithinMax(sku.price, input.quantity);
 
     const cartId = await this.getOrCreateCartId(user.id);
     const item = await this.prisma.cartItem.create({
@@ -93,10 +113,11 @@ export class CartService {
   ): Promise<CartItemResponse> {
     const existing = await this.prisma.cartItem.findFirst({
       where: { id: itemId, cart: { clientId: user.id } },
-      select: { id: true },
+      select: { id: true, sku: { select: { price: true } } },
     });
 
     if (!existing) throw new NotFoundException();
+    requireLineTotalWithinMax(existing.sku.price, input.quantity);
 
     const item = await this.prisma.cartItem.update({
       where: { id: existing.id },
