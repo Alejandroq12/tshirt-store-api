@@ -50,6 +50,25 @@ describe('CartItemUpdateRequest', () => {
   );
 });
 
+// cart_items.quantity is an int column.
+describe.each([
+  { type: CartItemCreateRequest, body: { skuId: SKU_ID } },
+  { type: CartItemUpdateRequest, body: {} },
+])('$type.name quantity', ({ type, body }) => {
+  const failingProperties = (quantity: number): string[] =>
+    validateSync(plainToInstance(type, { ...body, quantity })).map(
+      (error) => error.property,
+    );
+
+  it('accepts the largest int, 2147483647', () => {
+    expect(failingProperties(2147483647)).toEqual([]);
+  });
+
+  it('rejects 2147483648, which the int column cannot hold', () => {
+    expect(failingProperties(2147483648)).toEqual(['quantity']);
+  });
+});
+
 describe('CartItemIdParams', () => {
   it('rejects a malformed cart item id', () => {
     const input = plainToInstance(CartItemIdParams, { itemId: 'not-a-uuid' });

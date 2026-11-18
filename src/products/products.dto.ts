@@ -4,12 +4,12 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
 
 import { IntegerQuery } from '../common/validation/integer-query.decorator';
+import { MaxCodePoints } from '../common/validation/max-code-points.decorator';
 import { OptionalProperty } from '../common/validation/optional-property.decorator';
 
 export enum ProductStatus {
@@ -49,7 +49,7 @@ export class CreateProductRequest {
 
   @IsString()
   @MinLength(1)
-  @MaxLength(200)
+  @MaxCodePoints(200)
   name!: string;
 
   @IsOptional()
@@ -65,7 +65,7 @@ export class UpdateProductRequest {
   @OptionalProperty()
   @IsString()
   @MinLength(1)
-  @MaxLength(200)
+  @MaxCodePoints(200)
   name?: string;
 
   @IsOptional()

@@ -1,23 +1,25 @@
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsString, MinLength } from 'class-validator';
+
+import { MaxCodePoints } from '../common/validation/max-code-points.decorator';
 
 export class SignUpRequest {
   @IsEmail()
-  @MaxLength(255)
+  @MaxCodePoints(255)
   email!: string;
 
   @IsString()
   @MinLength(8)
-  @MaxLength(128)
+  @MaxCodePoints(128)
   password!: string;
 
   @IsString()
   @MinLength(1)
-  @MaxLength(100)
+  @MaxCodePoints(100)
   firstName!: string;
 
   @IsString()
   @MinLength(1)
-  @MaxLength(100)
+  @MaxCodePoints(100)
   lastName!: string;
 }
 
@@ -48,7 +50,7 @@ export class ResetPasswordRequest {
 
   @IsString()
   @MinLength(8)
-  @MaxLength(128)
+  @MaxCodePoints(128)
   newPassword!: string;
 }
 
@@ -59,6 +61,6 @@ export class ChangePasswordRequest {
 
   @IsString()
   @MinLength(8)
-  @MaxLength(128)
+  @MaxCodePoints(128)
   newPassword!: string;
 }

@@ -27,6 +27,16 @@ const failingProperties = (
     ({ property }) => property,
   );
 
+// validator.js isLength counts each pair as one character; the contract's
+// maxLength and the varchar columns count two code points.
+const VARIATION_PAIR = 'A\uFE0F';
+
+const TEXT_MAXIMUMS = [
+  ['skuCode', 64],
+  ['size', 20],
+  ['color', 40],
+] as const;
+
 describe('CreateSkuRequest', () => {
   // PositiveAmount: a canonical positive decimal(10,2) amount.
   it.each(['0.01', '19.90', '99999999.99'])(
@@ -69,11 +79,7 @@ describe('CreateSkuRequest', () => {
     },
   );
 
-  it.each([
-    ['skuCode', 64],
-    ['size', 20],
-    ['color', 40],
-  ] as const)(
+  it.each(TEXT_MAXIMUMS)(
     'accepts %s up to %i characters and rejects it empty or longer',
     (property, maximum) => {
       expect(
@@ -149,6 +155,47 @@ describe('UpdateSkuRequest', () => {
         PIPE_OPTIONS,
       ),
     ).toEqual(['productId']);
+  });
+});
+
+describe.each([
+  { type: CreateSkuRequest, body: SKU },
+  { type: UpdateSkuRequest, body: {} },
+])('$type.name text lengths', ({ type, body }) => {
+  it.each(TEXT_MAXIMUMS)(
+    'measures %s in code points, up to %i',
+    (property, maximum) => {
+      expect(
+        failingProperties(type, {
+          ...body,
+          [property]: VARIATION_PAIR.repeat(maximum / 2),
+        }),
+      ).toEqual([]);
+      expect(
+        failingProperties(type, {
+          ...body,
+          [property]: VARIATION_PAIR.repeat(maximum / 2 + 1),
+        }),
+      ).toEqual([property]);
+    },
+  );
+});
+
+// stock_quantity is an int column.
+describe.each([
+  { type: CreateSkuRequest, body: SKU },
+  { type: UpdateSkuRequest, body: {} },
+])('$type.name stock quantity', ({ type, body }) => {
+  it('accepts the largest int, 2147483647', () => {
+    expect(
+      failingProperties(type, { ...body, stockQuantity: 2147483647 }),
+    ).toEqual([]);
+  });
+
+  it('rejects 2147483648, which the int column cannot hold', () => {
+    expect(
+      failingProperties(type, { ...body, stockQuantity: 2147483648 }),
+    ).toEqual(['stockQuantity']);
   });
 });
 

@@ -3,11 +3,13 @@ import {
   IsString,
   IsUUID,
   Matches,
-  MaxLength,
+  Max,
   Min,
   MinLength,
 } from 'class-validator';
 
+import { INT4_MAX } from '../common/validation/int4';
+import { MaxCodePoints } from '../common/validation/max-code-points.decorator';
 import { OptionalProperty } from '../common/validation/optional-property.decorator';
 
 const POSITIVE_AMOUNT = /^(?!0\.00$)(0|[1-9]\d{0,7})\.\d{2}$/;
@@ -23,17 +25,17 @@ export class CreateSkuRequest {
 
   @IsString()
   @MinLength(1)
-  @MaxLength(64)
+  @MaxCodePoints(64)
   skuCode!: string;
 
   @IsString()
   @MinLength(1)
-  @MaxLength(20)
+  @MaxCodePoints(20)
   size!: string;
 
   @IsString()
   @MinLength(1)
-  @MaxLength(40)
+  @MaxCodePoints(40)
   color!: string;
 
   @IsString()
@@ -42,6 +44,7 @@ export class CreateSkuRequest {
 
   @IsInt()
   @Min(0)
+  @Max(INT4_MAX)
   stockQuantity!: number;
 }
 
@@ -49,19 +52,19 @@ export class UpdateSkuRequest {
   @OptionalProperty()
   @IsString()
   @MinLength(1)
-  @MaxLength(64)
+  @MaxCodePoints(64)
   skuCode?: string;
 
   @OptionalProperty()
   @IsString()
   @MinLength(1)
-  @MaxLength(20)
+  @MaxCodePoints(20)
   size?: string;
 
   @OptionalProperty()
   @IsString()
   @MinLength(1)
-  @MaxLength(40)
+  @MaxCodePoints(40)
   color?: string;
 
   @OptionalProperty()
@@ -72,5 +75,6 @@ export class UpdateSkuRequest {
   @OptionalProperty()
   @IsInt()
   @Min(0)
+  @Max(INT4_MAX)
   stockQuantity?: number;
 }
