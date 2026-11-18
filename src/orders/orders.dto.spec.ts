@@ -41,6 +41,28 @@ describe.each([
     ]);
   });
 
+  it('rejects a page value beyond 2^53 - 1 with one message each', () => {
+    const errors = validateSync(
+      plainToInstance(cls, {
+        limit: '1000000000000000000000',
+        offset: '9007199254740992',
+      }),
+    );
+
+    expect(
+      errors.map(({ property, constraints }) => [property, constraints]),
+    ).toEqual([
+      [
+        'limit',
+        { isSafeInteger: 'limit must not be greater than 9007199254740991' },
+      ],
+      [
+        'offset',
+        { isSafeInteger: 'offset must not be greater than 9007199254740991' },
+      ],
+    ]);
+  });
+
   it.each([
     [{ limit: '0', offset: '0' }, 'limit'],
     [{ offset: '0' }, 'limit'],
