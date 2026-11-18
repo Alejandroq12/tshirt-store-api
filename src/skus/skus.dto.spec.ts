@@ -27,6 +27,16 @@ const failingProperties = (
     ({ property }) => property,
   );
 
+// validator.js isLength counts each pair as one character; the contract's
+// maxLength and the varchar columns count two code points.
+const VARIATION_PAIR = 'A\uFE0F';
+
+const TEXT_MAXIMUMS = [
+  ['skuCode', 64],
+  ['size', 20],
+  ['color', 40],
+] as const;
+
 describe('CreateSkuRequest', () => {
   // PositiveAmount: a canonical positive decimal(10,2) amount.
   it.each(['0.01', '19.90', '99999999.99'])(
@@ -69,11 +79,7 @@ describe('CreateSkuRequest', () => {
     },
   );
 
-  it.each([
-    ['skuCode', 64],
-    ['size', 20],
-    ['color', 40],
-  ] as const)(
+  it.each(TEXT_MAXIMUMS)(
     'accepts %s up to %i characters and rejects it empty or longer',
     (property, maximum) => {
       expect(
@@ -150,6 +156,29 @@ describe('UpdateSkuRequest', () => {
       ),
     ).toEqual(['productId']);
   });
+});
+
+describe.each([
+  { type: CreateSkuRequest, body: SKU },
+  { type: UpdateSkuRequest, body: {} },
+])('$type.name text lengths', ({ type, body }) => {
+  it.each(TEXT_MAXIMUMS)(
+    'measures %s in code points, up to %i',
+    (property, maximum) => {
+      expect(
+        failingProperties(type, {
+          ...body,
+          [property]: VARIATION_PAIR.repeat(maximum / 2),
+        }),
+      ).toEqual([]);
+      expect(
+        failingProperties(type, {
+          ...body,
+          [property]: VARIATION_PAIR.repeat(maximum / 2 + 1),
+        }),
+      ).toEqual([property]);
+    },
+  );
 });
 
 describe('SkuIdParams', () => {
