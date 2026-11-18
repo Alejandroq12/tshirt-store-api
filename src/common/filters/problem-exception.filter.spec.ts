@@ -271,6 +271,106 @@ describe('ProblemExceptionFilter', () => {
     });
   });
 
+  describe('rejections from the body parser', () => {
+    // The shape http-errors gives body-parser's errors.
+    const parserError = (
+      status: number,
+      message: string,
+      type: string,
+    ): Error =>
+      Object.assign(new Error(message), {
+        expose: status < 500,
+        status,
+        statusCode: status,
+        type,
+      });
+
+    it('keeps the 413 of a JSON body over the size limit', () => {
+      const { host, captured } = capture();
+
+      filter.catch(
+        parserError(413, 'request entity too large', 'entity.too.large'),
+        host,
+      );
+
+      expect(captured.status).toBe(413);
+      expect(captured.headers['content-type']).toBe('application/problem+json');
+      expect(captured.body).toEqual({
+        type: PROBLEM_TYPE.BLANK,
+        title: 'Content Too Large',
+        status: 413,
+        instance: '/v1/orders',
+      });
+    });
+
+    it.each([
+      ['charset', 'unsupported charset "ISO-8859-1"', 'charset.unsupported'],
+      [
+        'content encoding',
+        'unsupported content encoding "bogus"',
+        'encoding.unsupported',
+      ],
+    ])(
+      'keeps the 415 of an unsupported %s without echoing it',
+      (_case, message, type) => {
+        const { host, captured } = capture();
+
+        filter.catch(parserError(415, message, type), host);
+
+        expect(captured.status).toBe(415);
+        expect(captured.body).toEqual({
+          type: PROBLEM_TYPE.BLANK,
+          title: 'Unsupported Media Type',
+          status: 415,
+          instance: '/v1/orders',
+        });
+      },
+    );
+
+    it('does not log a stack for the caller’s own mistake', () => {
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const { host } = capture();
+
+      filter.catch(
+        parserError(413, 'request entity too large', 'entity.too.large'),
+        host,
+      );
+
+      expect(logged).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'an error that does not mark itself exposed',
+        Object.assign(new Error('stream encoding should not be set'), {
+          status: 400,
+          statusCode: 400,
+        }),
+      ],
+      [
+        'an exposed error outside 4xx',
+        Object.assign(new Error('upstream failed'), {
+          expose: true,
+          status: 502,
+        }),
+      ],
+    ])('still answers %s with a bare 500', (_case, error) => {
+      const { host, captured } = capture();
+
+      filter.catch(error, host);
+
+      expect(captured.status).toBe(500);
+      expect(captured.body).toEqual({
+        type: PROBLEM_TYPE.BLANK,
+        title: 'Internal Server Error',
+        status: 500,
+        instance: '/v1/orders',
+      });
+    });
+  });
+
   describe('database constraints the design relies on', () => {
     const prismaError = (code: string): Prisma.PrismaClientKnownRequestError =>
       new Prisma.PrismaClientKnownRequestError('constraint failed', {

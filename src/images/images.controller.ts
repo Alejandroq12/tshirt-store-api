@@ -18,7 +18,10 @@ import { multerExceptions } from '@nestjs/platform-express/multer/multer/multer.
 import { catchError, throwError } from 'rxjs';
 
 import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
-import { ValidationProblemException } from '../common/problems';
+import {
+  ValidationProblemException,
+  type ValidationProblemError,
+} from '../common/problems';
 import { ProductIdParams } from '../products/products.dto';
 import {
   IMAGE_MAX_BYTES,
@@ -48,31 +51,40 @@ const IMAGE_UPLOAD_OPTIONS: MulterModuleOptions = {
 };
 
 // FileInterceptor answers a file part under another name, or a second `file`
-// part, with BadRequestException('Unexpected field - <name>'). The operation
-// declares no 400, so that part is an invalid body and gets the same 422 as a
-// missing `file` part.
-const UNEXPECTED_FILE_PART = `${multerExceptions.LIMIT_UNEXPECTED_FILE} - `;
+// part, with BadRequestException('Unexpected field - <name>'), and a text part
+// over busboy's 1 MB default with 'Field value too long - <name>'. The
+// operation declares no 400, so either part is an invalid body and gets the
+// same 422 as a missing `file` part, naming the part.
+const INVALID_PARTS: ReadonlyArray<{ prefix: string; message: string }> = [
+  {
+    prefix: `${multerExceptions.LIMIT_UNEXPECTED_FILE} - `,
+    message: 'only one file part, named file, is accepted',
+  },
+  {
+    prefix: `${multerExceptions.LIMIT_FIELD_VALUE} - `,
+    message: 'value is too long',
+  },
+];
 
-const unexpectedFilePart = (error: unknown): string | undefined =>
-  error instanceof BadRequestException &&
-  error.message.startsWith(UNEXPECTED_FILE_PART)
-    ? error.message.slice(UNEXPECTED_FILE_PART.length)
-    : undefined;
+const invalidPart = (error: unknown): ValidationProblemError | undefined => {
+  if (!(error instanceof BadRequestException)) return undefined;
+  const match = INVALID_PARTS.find(({ prefix }) =>
+    error.message.startsWith(prefix),
+  );
+  if (match === undefined) return undefined;
+  return {
+    field: error.message.slice(match.prefix.length),
+    message: match.message,
+  };
+};
 
-const UNEXPECTED_FILE_PART_AS_VALIDATION: NestInterceptor = {
+const INVALID_PART_AS_VALIDATION: NestInterceptor = {
   intercept: (_context, next) =>
     next.handle().pipe(
       catchError((error: unknown) => {
-        const field = unexpectedFilePart(error);
+        const part = invalidPart(error);
         return throwError(() =>
-          field === undefined
-            ? error
-            : new ValidationProblemException([
-                {
-                  field,
-                  message: 'only one file part, named file, is accepted',
-                },
-              ]),
+          part === undefined ? error : new ValidationProblemException([part]),
         );
       }),
     ),
@@ -85,7 +97,7 @@ export class ImagesController {
   @Post()
   @CheckAbilities({ action: 'create', subject: 'ProductImage' })
   @UseInterceptors(
-    UNEXPECTED_FILE_PART_AS_VALIDATION,
+    INVALID_PART_AS_VALIDATION,
     FileInterceptor('file', IMAGE_UPLOAD_OPTIONS),
   )
   uploadProductImage(

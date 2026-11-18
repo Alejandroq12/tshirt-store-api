@@ -68,6 +68,42 @@ describe('HTTP contract (e2e)', () => {
         ),
       ).toEqual([]);
     });
+
+    it('keeps the 413 of a JSON body over the parser limit', async () => {
+      const response = await post('/v1/probe', {
+        email: 'ana@example.com',
+        quantity: 2,
+        padding: 'a'.repeat(100 * 1024),
+      }).expect(413);
+
+      expect(response.headers['content-type']).toContain(
+        'application/problem+json',
+      );
+      expect(response.body).toEqual({
+        type: 'about:blank',
+        title: 'Content Too Large',
+        status: 413,
+        instance: '/v1/probe',
+      });
+    });
+
+    it('keeps the 415 of a JSON body in an unsupported charset', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/v1/probe')
+        .set('Content-Type', 'application/json; charset=iso-8859-1')
+        .send('{"email":"ana@example.com","quantity":2}')
+        .expect(415);
+
+      expect(response.headers['content-type']).toContain(
+        'application/problem+json',
+      );
+      expect(response.body).toEqual({
+        type: 'about:blank',
+        title: 'Unsupported Media Type',
+        status: 415,
+        instance: '/v1/probe',
+      });
+    });
   });
 
   describe('an invalid body returns 422, not 400', () => {
