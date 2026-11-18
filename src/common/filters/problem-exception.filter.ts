@@ -36,6 +36,7 @@ const STATUS_TITLE: Readonly<Record<number, string>> = {
   504: 'Gateway Timeout',
 };
 
+const CLIENT_ERROR = 400;
 const SERVER_ERROR = 500;
 
 const titleFor = (status: number): string =>
@@ -60,6 +61,26 @@ const detailFrom = (body: unknown, title: string): string | undefined => {
   if (candidate === undefined) return undefined;
   const trimmed = candidate.trim();
   return trimmed === '' || trimmed === title ? undefined : trimmed;
+};
+
+// Express's body parser rejects a request before any guard runs, for example
+// 413 for a JSON body over its limit or 415 for an unsupported charset. It
+// throws http-errors objects, not HttpExceptions; `expose` is how that library
+// marks an error as the caller's fault and safe to answer.
+const parserClientStatus = (exception: unknown): number | undefined => {
+  if (typeof exception !== 'object' || exception === null) return undefined;
+  const { expose, status, statusCode } = exception as {
+    expose?: unknown;
+    status?: unknown;
+    statusCode?: unknown;
+  };
+  const code = status ?? statusCode;
+  return expose === true &&
+    typeof code === 'number' &&
+    code >= CLIENT_ERROR &&
+    code < SERVER_ERROR
+    ? code
+    : undefined;
 };
 
 @Catch()
@@ -129,6 +150,18 @@ export class ProblemExceptionFilter implements ExceptionFilter {
           instance,
         };
       }
+    }
+
+    // No detail: the title names the failure, and the parser's message can
+    // echo the caller's own Content-Type or Content-Encoding header.
+    const parserStatus = parserClientStatus(exception);
+    if (parserStatus !== undefined) {
+      return {
+        type: PROBLEM_TYPE.BLANK,
+        title: titleFor(parserStatus),
+        status: parserStatus,
+        instance,
+      };
     }
 
     return this.serverError(instance);
