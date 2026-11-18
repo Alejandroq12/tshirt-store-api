@@ -181,6 +181,24 @@ describe.each([
   );
 });
 
+// stock_quantity is an int column.
+describe.each([
+  { type: CreateSkuRequest, body: SKU },
+  { type: UpdateSkuRequest, body: {} },
+])('$type.name stock quantity', ({ type, body }) => {
+  it('accepts the largest int, 2147483647', () => {
+    expect(
+      failingProperties(type, { ...body, stockQuantity: 2147483647 }),
+    ).toEqual([]);
+  });
+
+  it('rejects 2147483648, which the int column cannot hold', () => {
+    expect(
+      failingProperties(type, { ...body, stockQuantity: 2147483648 }),
+    ).toEqual(['stockQuantity']);
+  });
+});
+
 describe('SkuIdParams', () => {
   it('rejects a SKU id that is not a UUID', () => {
     expect(failingProperties(SkuIdParams, { skuId: 'not-a-uuid' })).toEqual([
