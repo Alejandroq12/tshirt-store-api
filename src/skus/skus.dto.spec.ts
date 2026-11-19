@@ -28,7 +28,7 @@ const failingProperties = (
   );
 
 // validator.js isLength counts each pair as one character; the contract's
-// maxLength and the varchar columns count two code points.
+// minLength and maxLength and the varchar columns count two code points.
 const VARIATION_PAIR = 'A\uFE0F';
 
 const TEXT_MAXIMUMS = [
@@ -177,6 +177,16 @@ describe.each([
           [property]: VARIATION_PAIR.repeat(maximum / 2 + 1),
         }),
       ).toEqual([property]);
+    },
+  );
+
+  it.each(TEXT_MAXIMUMS.map(([property]) => property))(
+    'accepts %s of one code point and rejects it empty',
+    (property) => {
+      expect(failingProperties(type, { ...body, [property]: 'x' })).toEqual([]);
+      expect(failingProperties(type, { ...body, [property]: '' })).toEqual([
+        property,
+      ]);
     },
   );
 });
