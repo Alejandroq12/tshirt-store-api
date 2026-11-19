@@ -6,6 +6,7 @@ import type { SessionPrincipal } from '../../auth/types/session-principal';
 import { exceedsMaxAmount, MAX_AMOUNT } from '../../common/money/max-amount';
 import { ValidationProblemException } from '../../common/problems';
 import type { EnvironmentVariables } from '../../config/env.validation';
+import { isUniqueViolation } from '../../prisma/prisma-errors';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CartItemCreateRequest, CartItemUpdateRequest } from '../cart.dto';
 import type { CartItemResponse, CartResponse } from '../types/cart.types';
@@ -39,10 +40,6 @@ type CartRecord = Prisma.CartGetPayload<{ select: typeof CART_SELECT }>;
 type CartItemRecord = Prisma.CartItemGetPayload<{
   select: typeof CART_ITEM_SELECT;
 }>;
-
-const isUniqueViolation = (error: unknown): boolean =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === 'P2002';
 
 // A line total above the largest amount breaks the contract's PositiveAmount
 // on lineTotal and could never become an order line. Prices are read again
