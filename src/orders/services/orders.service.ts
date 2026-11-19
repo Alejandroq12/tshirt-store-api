@@ -23,6 +23,7 @@ import {
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
 import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
+import { isUniqueViolation } from '../../prisma/prisma-errors';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   ListMyOrdersQuery,
@@ -87,10 +88,6 @@ const RESPONSE_PAYMENT_METHOD = {
   PrismaPaymentMethod,
   OrderResponse['paymentMethod']
 >;
-
-const isUniqueViolation = (error: unknown): boolean =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === 'P2002';
 
 const emptyCartProblem = (): ProblemException =>
   new ProblemException({
