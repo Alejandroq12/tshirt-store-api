@@ -29,7 +29,7 @@ function emailOfLength(length: number): string {
 }
 
 // validator.js isLength counts each pair as one character; the contract's
-// maxLength and the varchar column count two code points.
+// minLength and maxLength and the varchar column count two code points.
 const VARIATION_PAIR = 'A\uFE0F';
 
 const SIGN_UP = {
@@ -112,6 +112,21 @@ describe('SignUpRequest', () => {
       failingProperties(SignUpRequest, {
         ...SIGN_UP,
         password: VARIATION_PAIR.repeat(65),
+      }),
+    ).toEqual(['password']);
+  });
+
+  it('measures a password minimum in code points, accepting 8 and rejecting 7', () => {
+    expect(
+      failingProperties(SignUpRequest, {
+        ...SIGN_UP,
+        password: VARIATION_PAIR.repeat(4),
+      }),
+    ).toEqual([]);
+    expect(
+      failingProperties(SignUpRequest, {
+        ...SIGN_UP,
+        password: `${VARIATION_PAIR.repeat(3)}A`,
       }),
     ).toEqual(['password']);
   });
@@ -234,6 +249,21 @@ describe.each([
       failingProperties(type, {
         ...body,
         newPassword: VARIATION_PAIR.repeat(65),
+      }),
+    ).toEqual(['newPassword']);
+  });
+
+  it('measures a newPassword minimum in code points, accepting 8 and rejecting 7', () => {
+    expect(
+      failingProperties(type, {
+        ...body,
+        newPassword: VARIATION_PAIR.repeat(4),
+      }),
+    ).toEqual([]);
+    expect(
+      failingProperties(type, {
+        ...body,
+        newPassword: `${VARIATION_PAIR.repeat(3)}A`,
       }),
     ).toEqual(['newPassword']);
   });
