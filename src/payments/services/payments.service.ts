@@ -1,12 +1,11 @@
 import {
   BadGatewayException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OrderStatus, PaymentMethod, Prisma, UserRole } from '@prisma/client';
+import { OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 
 import type { SessionPrincipal } from '../../auth/types/session-principal';
 import {
@@ -150,8 +149,6 @@ export class PaymentsService {
     input: PaymentIntentCreateRequest,
     user: SessionPrincipal,
   ): Promise<PaymentIntentResponse> {
-    if (user.role !== UserRole.CLIENT) throw new ForbiddenException();
-
     const order = await this.prisma.order.findFirst({
       where: { id: input.orderId, clientId: user.id },
       select: ORDER_FOR_INTENT_SELECT,

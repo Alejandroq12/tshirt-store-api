@@ -87,9 +87,8 @@ describe('payment controllers', () => {
     );
   });
 
-  it('requires the PaymentLink ability only on manager link creation', () => {
+  it('requires the PaymentLink ability on manager link creation', () => {
     const linkTarget = methodTarget(links, 'createPaymentLink');
-    const intentTarget = methodTarget(intents, 'createPaymentIntent');
 
     expect(Reflect.getMetadata(REQUIRED_ABILITIES, linkTarget)).toEqual([
       { action: 'create', subject: 'PaymentLink' },
@@ -97,10 +96,19 @@ describe('payment controllers', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, linkTarget)).toContain(
       AbilitiesGuard,
     );
-    expect(
-      Reflect.getMetadata(REQUIRED_ABILITIES, intentTarget),
-    ).toBeUndefined();
-    expect(Reflect.getMetadata(GUARDS_METADATA, intentTarget)).toBeUndefined();
+  });
+
+  // The guard runs before the ValidationPipe, so a manager gets 403 even for
+  // a body that would fail validation.
+  it('requires the PaymentIntent ability on client intent creation', () => {
+    const intentTarget = methodTarget(intents, 'createPaymentIntent');
+
+    expect(Reflect.getMetadata(REQUIRED_ABILITIES, intentTarget)).toEqual([
+      { action: 'create', subject: 'PaymentIntent' },
+    ]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, intentTarget)).toContain(
+      AbilitiesGuard,
+    );
   });
 
   it('passes the raw body and signature to the public webhook', async () => {
