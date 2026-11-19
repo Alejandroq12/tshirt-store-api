@@ -5,11 +5,11 @@ import {
   IsString,
   IsUUID,
   Min,
-  MinLength,
 } from 'class-validator';
 
 import { IntegerQuery } from '../common/validation/integer-query.decorator';
 import { MaxCodePoints } from '../common/validation/max-code-points.decorator';
+import { MinCodePoints } from '../common/validation/min-code-points.decorator';
 import { OptionalProperty } from '../common/validation/optional-property.decorator';
 
 export enum ProductStatus {
@@ -29,7 +29,7 @@ export class ListProductsQuery {
 
   @IsOptional()
   @IsString()
-  @MinLength(1)
+  @MinCodePoints(1)
   category?: string;
 }
 
@@ -48,7 +48,7 @@ export class CreateProductRequest {
   categoryId!: string;
 
   @IsString()
-  @MinLength(1)
+  @MinCodePoints(1)
   @MaxCodePoints(200)
   name!: string;
 
@@ -64,7 +64,7 @@ export class UpdateProductRequest {
 
   @OptionalProperty()
   @IsString()
-  @MinLength(1)
+  @MinCodePoints(1)
   @MaxCodePoints(200)
   name?: string;
 
