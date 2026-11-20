@@ -2,6 +2,7 @@ import { Body, Controller, Post } from '@nestjs/common';
 
 import type { SessionPrincipal } from '../auth/types/session-principal';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CheckAbilities } from '../authorization/decorators/check-abilities.decorator';
 import { PaymentIntentCreateRequest } from './payments.dto';
 import { PaymentsService } from './services/payments.service';
 import type { PaymentIntentResponse } from './types/payments.types';
@@ -11,6 +12,7 @@ export class PaymentIntentsController {
   constructor(private readonly payments: PaymentsService) {}
 
   @Post()
+  @CheckAbilities({ action: 'create', subject: 'PaymentIntent' })
   createPaymentIntent(
     @Body() input: PaymentIntentCreateRequest,
     @CurrentUser() user: SessionPrincipal,

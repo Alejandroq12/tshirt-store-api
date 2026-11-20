@@ -54,3 +54,26 @@ describe('PaymentLinkCreateRequest', () => {
     }
   });
 });
+
+// payment_links.quantity is an int column.
+describe('PaymentLinkCreateRequest quantity', () => {
+  it('accepts the largest int, 2147483647', () => {
+    const input = plainToInstance(PaymentLinkCreateRequest, {
+      skuId: SKU_ID,
+      quantity: 2147483647,
+    });
+
+    expect(validateSync(input)).toHaveLength(0);
+  });
+
+  it('rejects 2147483648, which the int column cannot hold', () => {
+    const input = plainToInstance(PaymentLinkCreateRequest, {
+      skuId: SKU_ID,
+      quantity: 2147483648,
+    });
+
+    expect(validateSync(input).map((error) => error.property)).toEqual([
+      'quantity',
+    ]);
+  });
+});

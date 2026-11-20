@@ -100,6 +100,7 @@ describe('the abilities each feature registers', () => {
     ['manage', 'Cart'],
     ['create', 'Order'],
     ['list', 'Order'],
+    ['create', 'PaymentIntent'],
   ];
 
   it.each(MANAGER_ACTIONS)('lets a manager %s a %s', (action, subject) => {
@@ -147,7 +148,7 @@ describe('the abilities each feature registers', () => {
     expect(can(CLIENT, 'manage', 'CartItem')).toBe(false);
     expect(can(CLIENT, 'read', 'Order')).toBe(false);
     expect(can(CLIENT, 'manage', 'all')).toBe(false);
-    expect(abilities.createForUser(CLIENT).rules).toHaveLength(5);
+    expect(abilities.createForUser(CLIENT).rules).toHaveLength(6);
   });
 
   it('builds a fresh ability per caller, so roles never leak between them', () => {

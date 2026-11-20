@@ -20,6 +20,7 @@ class PaymentsAbilityRegistrar implements OnModuleInit {
   onModuleInit(): void {
     this.abilities.register((user, { can }) => {
       if (user.role === UserRole.MANAGER) can('create', 'PaymentLink');
+      if (user.role === UserRole.CLIENT) can('create', 'PaymentIntent');
     });
   }
 }

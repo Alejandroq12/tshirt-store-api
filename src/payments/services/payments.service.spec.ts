@@ -1,7 +1,6 @@
 import {
   BadGatewayException,
   ConflictException,
-  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -187,13 +186,6 @@ describe('PaymentsService', () => {
       JSON.stringify((error as BadGatewayException).getResponse()),
     ).not.toContain('sk_test_private');
     expect(paymentLinkCreate).not.toHaveBeenCalled();
-  });
-
-  it('refuses a manager before looking up a Payment Intent order', async () => {
-    await expect(
-      service.createIntent({ orderId: ORDER_ID }, MANAGER),
-    ).rejects.toThrow(ForbiddenException);
-    expect(orderFindFirst).not.toHaveBeenCalled();
   });
 
   it('hides an order that does not belong to the client', async () => {
