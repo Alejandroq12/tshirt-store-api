@@ -20,7 +20,7 @@ const failedProperties = (cls: RequestClass, value: object): string[] =>
   validateSync(plainToInstance(cls, value)).map(({ property }) => property);
 
 // validator.js isLength counts each pair as one character; the contract's
-// maxLength and the varchar(200) column count two code points.
+// minLength and maxLength and the varchar(200) column count two code points.
 const VARIATION_PAIR = 'A\uFE0F';
 
 describe('ListProductsQuery', () => {
@@ -122,6 +122,11 @@ describe.each([
     expect(
       failedProperties(type, { ...body, name: VARIATION_PAIR.repeat(101) }),
     ).toEqual(['name']);
+  });
+
+  it('accepts one code point and rejects an empty name', () => {
+    expect(failedProperties(type, { ...body, name: 'x' })).toEqual([]);
+    expect(failedProperties(type, { ...body, name: '' })).toEqual(['name']);
   });
 });
 
