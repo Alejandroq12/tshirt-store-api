@@ -118,7 +118,9 @@ not return internal detail.
 
 The Stripe webhook verifies `Stripe-Signature` against the raw request body.
 It stores the event before business changes. A repeated event ID does not apply
-stock twice.
+stock twice. A payment is applied only in `STORE_CURRENCY`, and a Payment
+Intent only for the order's frozen total; otherwise the order stays `pending`
+and the event keeps the reason.
 
 Successful payment locks Products first and SKUs in ascending ID order. Order,
 stock, cart reconciliation, low-stock outbox, and webhook state commit in one
@@ -283,7 +285,9 @@ Editor.
   Intent that matches no local order — in practice the one Stripe emits
   alongside a Checkout Session — is marked processed, with the reason recorded.
 - A Stripe Payment Link can remain active if its local insert fails.
-- Webhooks do not verify the paid amount and currency against the frozen Order.
+- A Checkout Session's total is recorded as Stripe charged it. The Payment Link
+  froze the unit price in Stripe when it was created, and no local copy exists
+  to compare it with; only the currency is checked.
 - Money conversion supports only currencies with two decimal places.
 - Payment Link buyers are matched to a CLIENT by checkout email.
 - Stock email delivery is at least once, so a crash can cause a duplicate.
