@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma, UserRole } from '@prisma/client';
 import type Stripe from 'stripe';
 
-import { fromMinorUnits } from '../../common/money/minor-units';
+import { fromMinorUnits, toMinorUnits } from '../../common/money/minor-units';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
 import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
@@ -22,6 +22,7 @@ const ORDER_FOR_PAYMENT_SELECT = {
   id: true,
   clientId: true,
   status: true,
+  totalAmount: true,
   paymentMethod: true,
   stripePaymentIntentId: true,
   items: {
@@ -246,6 +247,9 @@ export class StripeWebhookService {
       throw processingError(
         'Payment Intent currency is not the store currency',
       );
+    }
+    if (intent.amount_received !== toMinorUnits(order.totalAmount)) {
+      throw processingError('Payment Intent amount is not the order total');
     }
 
     const stock = await this.decrementStock(transaction, order.items);

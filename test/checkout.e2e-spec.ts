@@ -103,7 +103,12 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .send(payload);
   };
 
-  const paymentIntentEvent = (orderId: string, intentId: string) => ({
+  // amountReceived is in cents, as Stripe reports it.
+  const paymentIntentEvent = (
+    orderId: string,
+    intentId: string,
+    amountReceived: number,
+  ) => ({
     id: `evt_${randomUUID()}`,
     type: 'payment_intent.succeeded',
     created: Math.floor(Date.now() / 1000),
@@ -111,6 +116,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       object: {
         id: intentId,
         status: 'succeeded',
+        amount_received: amountReceived,
         currency: 'usd',
         metadata: { orderId },
       },
@@ -176,7 +182,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .send({ orderId })
       .expect(201);
 
-    const event = paymentIntentEvent(orderId, 'pi_checkout');
+    const event = paymentIntentEvent(orderId, 'pi_checkout', 3998);
     const pending = await prisma.stripeWebhookEvent.create({
       data: {
         stripeEventId: event.id,
@@ -271,7 +277,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
     ).resolves.toMatchObject({ stockQuantity: 10 });
 
-    const event = paymentIntentEvent(order.id, intent.id);
+    const event = paymentIntentEvent(order.id, intent.id, 3998);
     await postWebhook(event).expect(204);
 
     const paidOrder = await prisma.order.findUniqueOrThrow({
@@ -359,7 +365,9 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .set('Authorization', `Bearer ${buyerToken}`)
       .send({ orderId })
       .expect(201);
-    await postWebhook(paymentIntentEvent(orderId, 'pi_checkout')).expect(204);
+    await postWebhook(paymentIntentEvent(orderId, 'pi_checkout', 5997)).expect(
+      204,
+    );
 
     const firstCycle = await waitForSentNotifications(1);
     expect(firstCycle[0]).toMatchObject({
@@ -681,7 +689,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       where: { id: sku.id },
       data: { stockQuantity: 1 },
     });
-    const event = paymentIntentEvent(orderId, 'pi_checkout');
+    const event = paymentIntentEvent(orderId, 'pi_checkout', 3998);
     await postWebhook(event).expect(204);
 
     await expect(
@@ -813,7 +821,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
 
   it('rejects invalid signatures and unsupported payloads with 400', async () => {
     const invalidSignature = await postWebhook(
-      paymentIntentEvent(randomUUID(), 'pi_invalid'),
+      paymentIntentEvent(randomUUID(), 'pi_invalid', 3998),
       'invalid',
     ).expect(400);
 

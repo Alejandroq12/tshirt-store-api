@@ -33,6 +33,7 @@ const paymentIntentEvent = {
     object: {
       id: 'pi_1',
       status: 'succeeded',
+      amount_received: 4498,
       currency: 'usd',
       metadata: { orderId: ORDER_ID },
     },
@@ -96,6 +97,7 @@ const intentOrder = {
   id: ORDER_ID,
   clientId: CLIENT_ID,
   status: OrderStatus.PENDING,
+  totalAmount: new Prisma.Decimal('44.98'),
   paymentMethod: PaymentMethod.PAYMENT_INTENT,
   stripePaymentIntentId: 'pi_1',
   items: [
@@ -523,6 +525,12 @@ describe('StripeWebhookService', () => {
       paymentIntentEventWith({ currency: 'eur' }),
       intentOrder,
       'Payment Intent currency is not the store currency',
+    ],
+    [
+      'an intent that charged a different amount',
+      paymentIntentEventWith({ amount_received: 4497 }),
+      intentOrder,
+      'Payment Intent amount is not the order total',
     ],
   ])(
     'leaves the event pending for %s',
