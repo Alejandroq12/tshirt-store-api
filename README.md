@@ -118,7 +118,9 @@ not return internal detail.
 
 The Stripe webhook verifies `Stripe-Signature` against the raw request body.
 It stores the event before business changes. A repeated event ID does not apply
-stock twice.
+stock twice. A payment is applied only in `STORE_CURRENCY`, and a Payment
+Intent only for the order's frozen total; otherwise the order stays `pending`
+and the event keeps the reason.
 
 Successful payment locks Products first and SKUs in ascending ID order. Order,
 stock, cart reconciliation, low-stock outbox, and webhook state commit in one
