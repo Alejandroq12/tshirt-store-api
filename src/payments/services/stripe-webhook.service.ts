@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma, UserRole } from '@prisma/client';
 import type Stripe from 'stripe';
 
+import { fromMinorUnits } from '../../common/money/minor-units';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
 import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
@@ -316,8 +317,8 @@ export class StripeWebhookService {
       throw processingError('Checkout Session total is not a whole unit price');
     }
 
-    const totalAmount = new Prisma.Decimal(chargedCents).div(100);
-    const unitPrice = new Prisma.Decimal(chargedCents / link.quantity).div(100);
+    const totalAmount = fromMinorUnits(chargedCents);
+    const unitPrice = fromMinorUnits(chargedCents / link.quantity);
 
     const order = await transaction.order.create({
       data: {
