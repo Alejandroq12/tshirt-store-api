@@ -715,6 +715,67 @@ describe('Checkout and Stripe payments (e2e)', () => {
     expect(stored.errorMessage).toContain('Insufficient stock');
   });
 
+  it.each([
+    [
+      'an amount other than the order total',
+      { amount_received: 3997 },
+      'Payment Intent amount is not the order total',
+    ],
+    [
+      'a currency other than the store currency',
+      { currency: 'eur' },
+      'Payment Intent currency is not the store currency',
+    ],
+  ])(
+    'pays nothing and keeps the event pending for %s',
+    async (_name, charged, message) => {
+      const client = await createClient(prisma);
+      const token = await login(client);
+      const { sku } = await createProductWithSku(prisma, {
+        isActive: true,
+        stockQuantity: 5,
+      });
+
+      await request(app.getHttpServer())
+        .post('/v1/me/cart/items')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ skuId: sku.id, quantity: 2 })
+        .expect(201);
+      const orderResponse = await request(app.getHttpServer())
+        .post('/v1/orders')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(201);
+      const orderId = (orderResponse.body as CreatedOrderBody).id;
+      await request(app.getHttpServer())
+        .post('/v1/payment-intents')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ orderId })
+        .expect(201);
+
+      const event = paymentIntentEvent(orderId, 'pi_checkout', 3998);
+      Object.assign(event.data.object, charged);
+      await postWebhook(event).expect(204);
+
+      await expect(
+        prisma.order.findUniqueOrThrow({ where: { id: orderId } }),
+      ).resolves.toMatchObject({ status: OrderStatus.PENDING, paidAt: null });
+      await expect(
+        prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+      ).resolves.toMatchObject({ stockQuantity: 5 });
+      await expect(
+        prisma.cartItem.findFirstOrThrow({
+          where: { cart: { clientId: client.id }, skuId: sku.id },
+        }),
+      ).resolves.toMatchObject({ quantity: 2 });
+
+      const stored = await prisma.stripeWebhookEvent.findUniqueOrThrow({
+        where: { stripeEventId: event.id },
+      });
+      expect(stored.processedAt).toBeNull();
+      expect(stored.errorMessage).toBe(message);
+    },
+  );
+
   it('enforces payment authorization, validation, conflicts and safe provider failures', async () => {
     const manager = await createManager(prisma);
     const client = await createClient(prisma);
