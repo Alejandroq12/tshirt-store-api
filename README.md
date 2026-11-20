@@ -285,7 +285,9 @@ Editor.
   Intent that matches no local order — in practice the one Stripe emits
   alongside a Checkout Session — is marked processed, with the reason recorded.
 - A Stripe Payment Link can remain active if its local insert fails.
-- Webhooks do not verify the paid amount and currency against the frozen Order.
+- A Checkout Session's total is recorded as Stripe charged it. The Payment Link
+  froze the unit price in Stripe when it was created, and no local copy exists
+  to compare it with; only the currency is checked.
 - Money conversion supports only currencies with two decimal places.
 - Payment Link buyers are matched to a CLIENT by checkout email.
 - Stock email delivery is at least once, so a crash can cause a duplicate.
