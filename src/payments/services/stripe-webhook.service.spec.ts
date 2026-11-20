@@ -57,6 +57,7 @@ const checkoutEvent = {
       payment_link: 'plink_1',
       payment_status: 'paid',
       amount_total: 3998,
+      currency: 'usd',
       customer_details: { email: 'client@example.com' },
       customer_email: null,
     },
@@ -808,6 +809,26 @@ describe('StripeWebhookService', () => {
     expect(eventUpdateOutside).toHaveBeenCalledWith({
       where: { id: STORED_EVENT_ID, processedAt: null },
       data: { errorMessage: 'Checkout Session is missing payment data' },
+    });
+  });
+
+  it('creates no order for a session paid in another currency', async () => {
+    eventFindUnique.mockResolvedValue(
+      storedEvent(checkoutEventWith({ currency: 'eur' })),
+    );
+
+    await expect(service.process(STORED_EVENT_ID)).rejects.toThrow(
+      'Checkout Session currency is not the store currency',
+    );
+
+    expect(paymentLinkFindUnique).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(skuUpdate).not.toHaveBeenCalled();
+    expect(eventUpdateOutside).toHaveBeenCalledWith({
+      where: { id: STORED_EVENT_ID, processedAt: null },
+      data: {
+        errorMessage: 'Checkout Session currency is not the store currency',
+      },
     });
   });
 

@@ -296,6 +296,11 @@ export class StripeWebhookService {
     ) {
       throw processingError('Checkout Session is missing payment data');
     }
+    if (session.currency !== this.stripeCurrency) {
+      throw processingError(
+        'Checkout Session currency is not the store currency',
+      );
+    }
 
     const existing = await transaction.order.findUnique({
       where: { stripeCheckoutSessionId: session.id },
