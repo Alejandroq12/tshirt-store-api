@@ -621,6 +621,38 @@ describe('Checkout and Stripe payments (e2e)', () => {
     ).resolves.toBe(0);
   });
 
+  it('creates no order and moves no stock for a Checkout Session paid in another currency', async () => {
+    const client = await createClient(prisma, {
+      email: 'other-currency@example.com',
+    });
+    const { sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      price: '25.00',
+      stockQuantity: 5,
+    });
+    await createPaymentLinkFor(sku.id);
+
+    const sessionEvent = checkoutSessionEvent(
+      client.email,
+      `pi_${randomUUID()}`,
+    );
+    sessionEvent.data.object.currency = 'eur';
+    await postWebhook(sessionEvent).expect(204);
+
+    await expect(prisma.order.count()).resolves.toBe(0);
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 5 });
+
+    const stored = await prisma.stripeWebhookEvent.findUniqueOrThrow({
+      where: { stripeEventId: sessionEvent.id },
+    });
+    expect(stored.processedAt).toBeNull();
+    expect(stored.errorMessage).toBe(
+      'Checkout Session currency is not the store currency',
+    );
+  });
+
   it('pays the order found by its stored intent id when the succeeded event carries no order id', async () => {
     const client = await createClient(prisma);
     const token = await login(client);
