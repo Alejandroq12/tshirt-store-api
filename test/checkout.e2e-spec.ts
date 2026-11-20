@@ -111,6 +111,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       object: {
         id: intentId,
         status: 'succeeded',
+        currency: 'usd',
         metadata: { orderId },
       },
     },

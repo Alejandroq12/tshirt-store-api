@@ -20,6 +20,11 @@ const SKU_A_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const SKU_B_ID = '99999999-9999-4999-8999-999999999999';
 const EVENT_TIME = 1_788_523_200;
 
+const configValues: Partial<Record<keyof EnvironmentVariables, string>> = {
+  STRIPE_WEBHOOK_SECRET: 'whsec_test',
+  STORE_CURRENCY: 'USD',
+};
+
 const paymentIntentEvent = {
   id: 'evt_intent',
   type: 'payment_intent.succeeded',
@@ -28,10 +33,18 @@ const paymentIntentEvent = {
     object: {
       id: 'pi_1',
       status: 'succeeded',
+      currency: 'usd',
       metadata: { orderId: ORDER_ID },
     },
   },
 } as unknown as Stripe.PaymentIntentSucceededEvent;
+
+const paymentIntentEventWith = (
+  intent: Record<string, unknown>,
+): Stripe.PaymentIntentSucceededEvent => ({
+  ...paymentIntentEvent,
+  data: { object: { ...paymentIntentEvent.data.object, ...intent } },
+});
 
 const checkoutEvent = {
   id: 'evt_checkout',
@@ -184,7 +197,7 @@ describe('StripeWebhookService', () => {
     stockCycle,
     notifications,
     {
-      get: () => 'whsec_test',
+      get: (key: keyof EnvironmentVariables) => configValues[key],
     } as unknown as ConfigService<EnvironmentVariables, true>,
   );
 
@@ -504,6 +517,12 @@ describe('StripeWebhookService', () => {
       paymentIntentEvent,
       { ...intentOrder, status: OrderStatus.CANCELLED },
       'Payment Intent order cannot be paid',
+    ],
+    [
+      'an intent paid in another currency',
+      paymentIntentEventWith({ currency: 'eur' }),
+      intentOrder,
+      'Payment Intent currency is not the store currency',
     ],
   ])(
     'leaves the event pending for %s',

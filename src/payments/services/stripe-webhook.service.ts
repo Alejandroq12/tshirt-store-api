@@ -97,6 +97,8 @@ const settledWithoutOrder = (reason: string): ProcessedPayment => ({
 @Injectable()
 export class StripeWebhookService {
   private readonly webhookSecret: string;
+  // Stripe reports currencies in lowercase ISO 4217.
+  private readonly stripeCurrency: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -106,6 +108,9 @@ export class StripeWebhookService {
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.webhookSecret = config.get('STRIPE_WEBHOOK_SECRET', { infer: true });
+    this.stripeCurrency = config
+      .get('STORE_CURRENCY', { infer: true })
+      .toLowerCase();
   }
 
   async receive(rawBody?: Buffer, signature?: string): Promise<void> {
@@ -236,6 +241,11 @@ export class StripeWebhookService {
       order.stripePaymentIntentId !== intent.id
     ) {
       throw processingError('Payment Intent order cannot be paid');
+    }
+    if (intent.currency !== this.stripeCurrency) {
+      throw processingError(
+        'Payment Intent currency is not the store currency',
+      );
     }
 
     const stock = await this.decrementStock(transaction, order.items);
