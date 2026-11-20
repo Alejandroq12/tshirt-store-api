@@ -103,7 +103,13 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .send(payload);
   };
 
-  const paymentIntentEvent = (orderId: string, intentId: string) => ({
+  // amountReceived is in cents, as Stripe reports it. A null orderId leaves
+  // the metadata empty, so the order must be found by its stored intent id.
+  const paymentIntentEvent = (
+    orderId: string | null,
+    intentId: string,
+    amountReceived: number,
+  ) => ({
     id: `evt_${randomUUID()}`,
     type: 'payment_intent.succeeded',
     created: Math.floor(Date.now() / 1000),
@@ -111,7 +117,9 @@ describe('Checkout and Stripe payments (e2e)', () => {
       object: {
         id: intentId,
         status: 'succeeded',
-        metadata: { orderId },
+        amount_received: amountReceived,
+        currency: 'usd',
+        metadata: orderId ? { orderId } : {},
       },
     },
   });
@@ -175,7 +183,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .send({ orderId })
       .expect(201);
 
-    const event = paymentIntentEvent(orderId, 'pi_checkout');
+    const event = paymentIntentEvent(orderId, 'pi_checkout', 3998);
     const pending = await prisma.stripeWebhookEvent.create({
       data: {
         stripeEventId: event.id,
@@ -270,7 +278,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
     ).resolves.toMatchObject({ stockQuantity: 10 });
 
-    const event = paymentIntentEvent(order.id, intent.id);
+    const event = paymentIntentEvent(order.id, intent.id, 3998);
     await postWebhook(event).expect(204);
 
     const paidOrder = await prisma.order.findUniqueOrThrow({
@@ -358,7 +366,9 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .set('Authorization', `Bearer ${buyerToken}`)
       .send({ orderId })
       .expect(201);
-    await postWebhook(paymentIntentEvent(orderId, 'pi_checkout')).expect(204);
+    await postWebhook(paymentIntentEvent(orderId, 'pi_checkout', 5997)).expect(
+      204,
+    );
 
     const firstCycle = await waitForSentNotifications(1);
     expect(firstCycle[0]).toMatchObject({
@@ -633,7 +643,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .send({ orderId })
       .expect(201);
 
-    const strippedEvent = checkoutIntentEvent('pi_checkout');
+    const strippedEvent = paymentIntentEvent(null, 'pi_checkout', 3998);
     await postWebhook(strippedEvent).expect(204);
 
     await expect(
@@ -680,7 +690,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       where: { id: sku.id },
       data: { stockQuantity: 1 },
     });
-    const event = paymentIntentEvent(orderId, 'pi_checkout');
+    const event = paymentIntentEvent(orderId, 'pi_checkout', 3998);
     await postWebhook(event).expect(204);
 
     await expect(
@@ -705,6 +715,67 @@ describe('Checkout and Stripe payments (e2e)', () => {
     expect(stored.processedAt).toBeNull();
     expect(stored.errorMessage).toContain('Insufficient stock');
   });
+
+  it.each([
+    [
+      'an amount other than the order total',
+      { amount_received: 3997 },
+      'Payment Intent amount is not the order total',
+    ],
+    [
+      'a currency other than the store currency',
+      { currency: 'eur' },
+      'Payment Intent currency is not the store currency',
+    ],
+  ])(
+    'pays nothing and keeps the event pending for %s',
+    async (_name, charged, message) => {
+      const client = await createClient(prisma);
+      const token = await login(client);
+      const { sku } = await createProductWithSku(prisma, {
+        isActive: true,
+        stockQuantity: 5,
+      });
+
+      await request(app.getHttpServer())
+        .post('/v1/me/cart/items')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ skuId: sku.id, quantity: 2 })
+        .expect(201);
+      const orderResponse = await request(app.getHttpServer())
+        .post('/v1/orders')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(201);
+      const orderId = (orderResponse.body as CreatedOrderBody).id;
+      await request(app.getHttpServer())
+        .post('/v1/payment-intents')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ orderId })
+        .expect(201);
+
+      const event = paymentIntentEvent(orderId, 'pi_checkout', 3998);
+      Object.assign(event.data.object, charged);
+      await postWebhook(event).expect(204);
+
+      await expect(
+        prisma.order.findUniqueOrThrow({ where: { id: orderId } }),
+      ).resolves.toMatchObject({ status: OrderStatus.PENDING, paidAt: null });
+      await expect(
+        prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+      ).resolves.toMatchObject({ stockQuantity: 5 });
+      await expect(
+        prisma.cartItem.findFirstOrThrow({
+          where: { cart: { clientId: client.id }, skuId: sku.id },
+        }),
+      ).resolves.toMatchObject({ quantity: 2 });
+
+      const stored = await prisma.stripeWebhookEvent.findUniqueOrThrow({
+        where: { stripeEventId: event.id },
+      });
+      expect(stored.processedAt).toBeNull();
+      expect(stored.errorMessage).toBe(message);
+    },
+  );
 
   it('enforces payment authorization, validation, conflicts and safe provider failures', async () => {
     const manager = await createManager(prisma);
@@ -812,7 +883,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
 
   it('rejects invalid signatures and unsupported payloads with 400', async () => {
     const invalidSignature = await postWebhook(
-      paymentIntentEvent(randomUUID(), 'pi_invalid'),
+      paymentIntentEvent(randomUUID(), 'pi_invalid', 3998),
       'invalid',
     ).expect(400);
 
