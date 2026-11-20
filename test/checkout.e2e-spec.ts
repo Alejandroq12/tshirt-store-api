@@ -103,9 +103,10 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .send(payload);
   };
 
-  // amountReceived is in cents, as Stripe reports it.
+  // amountReceived is in cents, as Stripe reports it. A null orderId leaves
+  // the metadata empty, so the order must be found by its stored intent id.
   const paymentIntentEvent = (
-    orderId: string,
+    orderId: string | null,
     intentId: string,
     amountReceived: number,
   ) => ({
@@ -118,7 +119,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
         status: 'succeeded',
         amount_received: amountReceived,
         currency: 'usd',
-        metadata: { orderId },
+        metadata: orderId ? { orderId } : {},
       },
     },
   });
@@ -676,7 +677,7 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .send({ orderId })
       .expect(201);
 
-    const strippedEvent = checkoutIntentEvent('pi_checkout');
+    const strippedEvent = paymentIntentEvent(null, 'pi_checkout', 3998);
     await postWebhook(strippedEvent).expect(204);
 
     await expect(
