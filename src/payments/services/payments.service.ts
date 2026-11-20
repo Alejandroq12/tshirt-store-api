@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 
 import type { SessionPrincipal } from '../../auth/types/session-principal';
+import { toMinorUnits } from '../../common/money/minor-units';
 import {
   PROBLEM_TYPE,
   type ProblemDetail,
@@ -112,7 +113,7 @@ export class PaymentsService {
             price_data: {
               currency: this.currency.toLowerCase(),
               product_data: { name: sku.product.name },
-              unit_amount: sku.price.mul(100).toNumber(),
+              unit_amount: toMinorUnits(sku.price),
             },
             quantity: input.quantity,
           },
@@ -185,7 +186,7 @@ export class PaymentsService {
     try {
       intent = await this.stripe.createPaymentIntent(
         {
-          amount: order.totalAmount.mul(100).toNumber(),
+          amount: toMinorUnits(order.totalAmount),
           currency: this.currency.toLowerCase(),
           metadata: { orderId: order.id },
         },
