@@ -27,6 +27,7 @@ import {
   IMAGE_MAX_BYTES,
   isSupportedImageType,
 } from '../storage/image-upload.constants';
+import { matchesImageSignature } from './image-signature';
 import { UploadProductImageRequest } from './images.dto';
 import { ImagesService } from './services/images.service';
 import type { ImageAssetResponse } from './types/images.types';
@@ -39,6 +40,8 @@ interface UploadedImage {
 
 const FIRST_OVERSIZED_IMAGE_SIZE = IMAGE_MAX_BYTES + 1;
 
+// Multer calls the filter before it reads the file, so only the declared type
+// can be refused here; the handler checks the bytes once they are buffered.
 const IMAGE_UPLOAD_OPTIONS: MulterModuleOptions = {
   limits: { fileSize: FIRST_OVERSIZED_IMAGE_SIZE },
   fileFilter: (_request, file, callback) => {
@@ -111,7 +114,12 @@ export class ImagesController {
       ]);
     }
     if (file.size > IMAGE_MAX_BYTES) throw new PayloadTooLargeException();
-    if (!isSupportedImageType(file.mimetype)) {
+    // The declared type becomes the stored object's Content-Type, so the bytes
+    // must carry that type's signature, not merely some image signature.
+    if (
+      !isSupportedImageType(file.mimetype) ||
+      !matchesImageSignature(file.buffer, file.mimetype)
+    ) {
       throw new UnsupportedMediaTypeException();
     }
 

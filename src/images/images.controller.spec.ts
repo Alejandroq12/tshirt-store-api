@@ -24,6 +24,8 @@ import { ImagesController } from './images.controller';
 import type { ImagesService } from './services/images.service';
 
 const PRODUCT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
 
 const metadataFor = (key: string): unknown => {
   const target = Object.getOwnPropertyDescriptor(
@@ -55,9 +57,9 @@ describe('ImagesController', () => {
     upload,
   } as unknown as ImagesService);
   const file = {
-    buffer: Buffer.from('image'),
+    buffer: PNG,
     mimetype: 'image/png',
-    size: 5,
+    size: PNG.length,
   };
 
   beforeEach(() => {
@@ -122,6 +124,50 @@ describe('ImagesController', () => {
       ),
     ).toThrow(UnsupportedMediaTypeException);
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['text declared as PNG', Buffer.from('not an image'), 'image/png'],
+    ['JPEG bytes declared as PNG', JPEG, 'image/png'],
+    ['PNG bytes declared as WebP', PNG, 'image/webp'],
+    ['a PNG cut short of its signature', PNG.subarray(0, 4), 'image/png'],
+    ['an empty file declared as JPEG', Buffer.alloc(0), 'image/jpeg'],
+  ])('rejects %s before the service', (_case, buffer, mimetype) => {
+    expect(() =>
+      controller.uploadProductImage(
+        { productId: PRODUCT_ID },
+        {},
+        { buffer, mimetype, size: buffer.length },
+      ),
+    ).toThrow(UnsupportedMediaTypeException);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized file as too large before checking its bytes', () => {
+    const text = Buffer.from('not an image');
+
+    expect(() =>
+      controller.uploadProductImage(
+        { productId: PRODUCT_ID },
+        {},
+        { buffer: text, mimetype: 'image/png', size: IMAGE_MAX_BYTES + 1 },
+      ),
+    ).toThrow(PayloadTooLargeException);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('delegates JPEG bytes declared as JPEG with that content type', async () => {
+    await controller.uploadProductImage(
+      { productId: PRODUCT_ID },
+      {},
+      { buffer: JPEG, mimetype: 'image/jpeg', size: JPEG.length },
+    );
+
+    expect(upload).toHaveBeenCalledWith(
+      PRODUCT_ID,
+      {},
+      { body: JPEG, contentType: 'image/jpeg' },
+    );
   });
 
   it('catches file-part errors outside FileInterceptor', () => {

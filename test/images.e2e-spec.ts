@@ -12,6 +12,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import {
   IMAGE_CONTENT_TYPES,
   IMAGE_MAX_BYTES,
+  type ImageContentType,
 } from '../src/storage/image-upload.constants';
 import type { S3StorageService } from '../src/storage/s3-storage.service';
 import { createTestApp } from './support/create-test-app';
@@ -29,6 +30,24 @@ interface AuthSessionBody {
 interface ValidationBody {
   errors: Array<{ field: string; message: string }>;
 }
+
+// An upload is checked against the leading bytes of its declared type, so the
+// type's signature padded with filler stands for a real image.
+const SIGNATURES: Readonly<Record<ImageContentType, Buffer>> = {
+  'image/jpeg': Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+  'image/png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  'image/webp': Buffer.concat([
+    Buffer.from('RIFF', 'ascii'),
+    Buffer.from([0x24, 0x00, 0x00, 0x00]),
+    Buffer.from('WEBP', 'ascii'),
+  ]),
+};
+
+const imageBytes = (contentType: ImageContentType, size = 16): Buffer => {
+  const bytes = Buffer.alloc(size, 1);
+  SIGNATURES[contentType].copy(bytes);
+  return bytes;
+};
 
 describe('Product images (e2e)', () => {
   let app: INestApplication<App>;
@@ -109,10 +128,11 @@ describe('Product images (e2e)', () => {
 
   it('allows only managers and exposes the uploaded fallback publicly', async () => {
     const product = await createProduct();
+    const png = imageBytes('image/png');
 
     await request(app.getHttpServer())
       .post(`/v1/products/${product.id}/images`)
-      .attach('file', Buffer.from('png'), {
+      .attach('file', png, {
         filename: 'shirt.png',
         contentType: 'image/png',
       })
@@ -122,7 +142,7 @@ describe('Product images (e2e)', () => {
     await request(app.getHttpServer())
       .post(`/v1/products/${product.id}/images`)
       .set('Authorization', `Bearer ${client.accessToken}`)
-      .attach('file', Buffer.from('png'), {
+      .attach('file', png, {
         filename: 'shirt.png',
         contentType: 'image/png',
       })
@@ -132,7 +152,7 @@ describe('Product images (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post(`/v1/products/${product.id}/images`)
       .set('Authorization', `Bearer ${manager.accessToken}`)
-      .attach('file', Buffer.from('png'), {
+      .attach('file', png, {
         filename: 'shirt.png',
         contentType: 'image/png',
       })
@@ -156,7 +176,7 @@ describe('Product images (e2e)', () => {
     });
     expect(storageUpload).toHaveBeenCalledTimes(1);
     expect(storageUpload).toHaveBeenCalledWith({
-      body: Buffer.from('png'),
+      body: png,
       contentType: 'image/png',
       prefix: `products/${product.id}`,
     });
@@ -188,11 +208,11 @@ describe('Product images (e2e)', () => {
   it('accepts all supported types and maintains one fallback primary', async () => {
     const product = await createProduct();
     const manager = await login('MANAGER');
-    const upload = (contentType: 'image/jpeg' | 'image/png' | 'image/webp') =>
+    const upload = (contentType: ImageContentType) =>
       request(app.getHttpServer())
         .post(`/v1/products/${product.id}/images`)
         .set('Authorization', `Bearer ${manager.accessToken}`)
-        .attach('file', Buffer.from(contentType), {
+        .attach('file', imageBytes(contentType), {
           filename: `shirt.${IMAGE_CONTENT_TYPES[contentType]}`,
           contentType,
         });
@@ -238,7 +258,7 @@ describe('Product images (e2e)', () => {
       let upload = request(app.getHttpServer())
         .post(`/v1/products/${product.id}/images`)
         .set('Authorization', `Bearer ${manager.accessToken}`)
-        .attach('file', Buffer.from('image'), {
+        .attach('file', imageBytes('image/webp'), {
           filename: 'shirt.webp',
           contentType: 'image/webp',
         });
@@ -302,11 +322,12 @@ describe('Product images (e2e)', () => {
       request(app.getHttpServer())
         .post(path)
         .set('Authorization', `Bearer ${manager.accessToken}`);
-    const attach = (path: string, size: number, contentType: string) =>
-      authorize(path).attach('file', Buffer.alloc(size, 1), {
+    const attach = (path: string, file: Buffer, contentType: string) =>
+      authorize(path).attach('file', file, {
         filename: 'shirt.bin',
         contentType,
       });
+    const png = imageBytes('image/png');
 
     const missingFile = await authorize(`/v1/products/${product.id}/images`)
       .field('primary', 'false')
@@ -316,31 +337,106 @@ describe('Product images (e2e)', () => {
       message: 'file is required',
     });
 
-    await attach(`/v1/products/${product.id}/images`, 4, 'image/gif').expect(
-      415,
-    );
     await attach(
       `/v1/products/${product.id}/images`,
-      IMAGE_MAX_BYTES + 1,
+      Buffer.alloc(4, 1),
+      'image/gif',
+    ).expect(415);
+    await attach(
+      `/v1/products/${product.id}/images`,
+      imageBytes('image/png', IMAGE_MAX_BYTES + 1),
       'image/png',
     ).expect(413);
     await attach(
       `/v1/products/${product.id}/images`,
-      IMAGE_MAX_BYTES,
+      imageBytes('image/jpeg', IMAGE_MAX_BYTES),
       'image/jpeg',
     ).expect(201);
 
-    await attach(`/v1/products/${product.id}/images`, 4, 'image/png')
+    await attach(`/v1/products/${product.id}/images`, png, 'image/png')
       .field('primary', 'TRUE')
       .expect(422);
-    await attach(`/v1/products/${product.id}/images`, 4, 'image/png')
+    await attach(`/v1/products/${product.id}/images`, png, 'image/png')
       .field('skuIds', sku.id)
       .field('skuIds', sku.id)
       .expect(422);
-    await attach('/v1/products/not-a-uuid/images', 4, 'image/png').expect(422);
-    await attach(`/v1/products/${randomUUID()}/images`, 4, 'image/png').expect(
-      404,
+    await attach('/v1/products/not-a-uuid/images', png, 'image/png').expect(
+      422,
     );
+    await attach(
+      `/v1/products/${randomUUID()}/images`,
+      png,
+      'image/png',
+    ).expect(404);
+  });
+
+  it('answers 415 for bytes that are not the declared image and stores nothing', async () => {
+    const product = await createProduct();
+    const manager = await login('MANAGER');
+    const path = `/v1/products/${product.id}/images`;
+    const upload = (file: Buffer, contentType: string) =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${manager.accessToken}`)
+        .attach('file', file, { filename: 'shirt.img', contentType });
+
+    const refusals = [
+      await upload(Buffer.alloc(4, 1), 'image/gif').expect(415),
+      await upload(Buffer.from('not an image, only text'), 'image/png').expect(
+        415,
+      ),
+      await upload(imageBytes('image/jpeg'), 'image/webp').expect(415),
+    ];
+
+    for (const response of refusals) {
+      expect(response.headers['content-type']).toContain(
+        'application/problem+json',
+      );
+      expect(response.body).toEqual({
+        type: 'about:blank',
+        title: 'Unsupported Media Type',
+        status: 415,
+        instance: path,
+      });
+    }
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(
+      await prisma.productImage.count({ where: { productId: product.id } }),
+    ).toBe(0);
+
+    const png = imageBytes('image/png');
+    await upload(png, 'image/png').expect(201);
+    expect(storageUpload).toHaveBeenCalledTimes(1);
+    expect(storageUpload).toHaveBeenCalledWith({
+      body: png,
+      contentType: 'image/png',
+      prefix: `products/${product.id}`,
+    });
+  });
+
+  it('checks the bytes after validation and size, before the product lookup', async () => {
+    const product = await createProduct();
+    const manager = await login('MANAGER');
+    const text = Buffer.from('not an image, only text');
+    const upload = (path: string, file: Buffer) =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${manager.accessToken}`)
+        .attach('file', file, {
+          filename: 'shirt.png',
+          contentType: 'image/png',
+        });
+
+    await upload(`/v1/products/${product.id}/images`, text)
+      .field('primary', 'TRUE')
+      .expect(422);
+    await upload('/v1/products/not-a-uuid/images', text).expect(422);
+    await upload(
+      `/v1/products/${product.id}/images`,
+      Buffer.alloc(IMAGE_MAX_BYTES + 1, 1),
+    ).expect(413);
+    await upload(`/v1/products/${randomUUID()}/images`, text).expect(415);
+    expect(storageUpload).not.toHaveBeenCalled();
   });
 
   it('answers an unexpected or repeated file part with 422', async () => {
@@ -351,26 +447,25 @@ describe('Product images (e2e)', () => {
         .post(`/v1/products/${product.id}/images`)
         .set('Authorization', `Bearer ${manager.accessToken}`);
     const image = { filename: 'shirt.png', contentType: 'image/png' };
+    const png = imageBytes('image/png');
 
     const cases = [
       {
         field: 'photo',
-        response: await upload()
-          .attach('photo', Buffer.from('png'), image)
-          .expect(422),
+        response: await upload().attach('photo', png, image).expect(422),
       },
       {
         field: 'photo',
         response: await upload()
-          .attach('file', Buffer.from('png'), image)
-          .attach('photo', Buffer.from('png'), image)
+          .attach('file', png, image)
+          .attach('photo', png, image)
           .expect(422),
       },
       {
         field: 'file',
         response: await upload()
-          .attach('file', Buffer.from('png'), image)
-          .attach('file', Buffer.from('png'), image)
+          .attach('file', png, image)
+          .attach('file', png, image)
           .expect(422),
       },
     ];
@@ -401,7 +496,7 @@ describe('Product images (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post(`/v1/products/${product.id}/images`)
       .set('Authorization', `Bearer ${manager.accessToken}`)
-      .attach('file', Buffer.from('png'), {
+      .attach('file', imageBytes('image/png'), {
         filename: 'shirt.png',
         contentType: 'image/png',
       })
