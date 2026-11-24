@@ -40,6 +40,10 @@ describe('MailService', () => {
     } as unknown as ReturnType<typeof createTransport>);
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('transport', () => {
     it('is built from the configured host, port and TLS flag', () => {
       serviceWith();
@@ -119,6 +123,35 @@ describe('MailService', () => {
       expect(JSON.stringify(payload)).not.toContain('ana.rivera');
     });
 
+    it.each([
+      ['no local part', '@example.com'],
+      ['no @ at all', 'ana.rivera.example.com'],
+    ])('logs only *** for a recipient with %s', async (_case, to) => {
+      const logged = jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation(() => undefined);
+
+      await serviceWith().send({ to, subject: 's', text: 't' });
+
+      const [payload] = logged.mock.calls[0] as [{ to: string }];
+      expect(payload.to).toBe('***');
+    });
+
+    it('masks up to the last @, so a quoted local part does not leak', async () => {
+      const logged = jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation(() => undefined);
+
+      await serviceWith().send({
+        to: '"ana@home"@example.com',
+        subject: 's',
+        text: 't',
+      });
+
+      const [payload] = logged.mock.calls[0] as [{ to: string }];
+      expect(payload.to).toBe('"***@example.com');
+    });
+
     it('still delivers to the real address', async () => {
       await serviceWith().send({
         to: 'ana.rivera@example.com',
@@ -137,6 +170,18 @@ describe('MailService', () => {
       await expect(
         serviceWith().send({ to: 'ana@example.com', subject: 's', text: 't' }),
       ).rejects.toThrow('connection refused');
+    });
+
+    it('does not log a message as sent when the transport fails', async () => {
+      const logged = jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation(() => undefined);
+      sendMail.mockRejectedValue(new Error('connection refused'));
+
+      await expect(
+        serviceWith().send({ to: 'ana@example.com', subject: 's', text: 't' }),
+      ).rejects.toThrow();
+      expect(logged).not.toHaveBeenCalled();
     });
   });
 
