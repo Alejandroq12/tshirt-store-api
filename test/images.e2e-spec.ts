@@ -414,6 +414,31 @@ describe('Product images (e2e)', () => {
     });
   });
 
+  it('checks the bytes after validation and size, before the product lookup', async () => {
+    const product = await createProduct();
+    const manager = await login('MANAGER');
+    const text = Buffer.from('not an image, only text');
+    const upload = (path: string, file: Buffer) =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${manager.accessToken}`)
+        .attach('file', file, {
+          filename: 'shirt.png',
+          contentType: 'image/png',
+        });
+
+    await upload(`/v1/products/${product.id}/images`, text)
+      .field('primary', 'TRUE')
+      .expect(422);
+    await upload('/v1/products/not-a-uuid/images', text).expect(422);
+    await upload(
+      `/v1/products/${product.id}/images`,
+      Buffer.alloc(IMAGE_MAX_BYTES + 1, 1),
+    ).expect(413);
+    await upload(`/v1/products/${randomUUID()}/images`, text).expect(415);
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
   it('answers an unexpected or repeated file part with 422', async () => {
     const product = await createProduct();
     const manager = await login('MANAGER');

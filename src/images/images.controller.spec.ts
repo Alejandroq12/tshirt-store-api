@@ -143,6 +143,19 @@ describe('ImagesController', () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
+  it('rejects an oversized file as too large before checking its bytes', () => {
+    const text = Buffer.from('not an image');
+
+    expect(() =>
+      controller.uploadProductImage(
+        { productId: PRODUCT_ID },
+        {},
+        { buffer: text, mimetype: 'image/png', size: IMAGE_MAX_BYTES + 1 },
+      ),
+    ).toThrow(PayloadTooLargeException);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
   it('delegates JPEG bytes declared as JPEG with that content type', async () => {
     await controller.uploadProductImage(
       { productId: PRODUCT_ID },
