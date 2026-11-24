@@ -24,6 +24,7 @@ import { ImagesController } from './images.controller';
 import type { ImagesService } from './services/images.service';
 
 const PRODUCT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 
 const metadataFor = (key: string): unknown => {
   const target = Object.getOwnPropertyDescriptor(
@@ -55,9 +56,9 @@ describe('ImagesController', () => {
     upload,
   } as unknown as ImagesService);
   const file = {
-    buffer: Buffer.from('image'),
+    buffer: PNG,
     mimetype: 'image/png',
-    size: 5,
+    size: PNG.length,
   };
 
   beforeEach(() => {
