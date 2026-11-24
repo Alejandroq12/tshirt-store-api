@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   ConflictException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -71,6 +72,7 @@ describe('PaymentsService', () => {
   const orderCreate = jest.fn();
   const createPaymentLink = jest.fn();
   const createPaymentIntent = jest.fn();
+  const deactivatePaymentLink = jest.fn();
   const prisma = {
     productSku: { findUnique: skuFindUnique },
     paymentLink: { create: paymentLinkCreate },
@@ -83,6 +85,7 @@ describe('PaymentsService', () => {
   const stripe = {
     createPaymentLink,
     createPaymentIntent,
+    deactivatePaymentLink,
   } as unknown as StripeClient;
   const service = new PaymentsService(prisma, stripe, {
     get: () => 'USD',
@@ -110,6 +113,11 @@ describe('PaymentsService', () => {
       id: 'pi_1',
       client_secret: 'pi_1_secret_safe',
     });
+    deactivatePaymentLink.mockResolvedValue({ id: 'plink_1', active: false });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('returns 404 without contacting Stripe when the SKU does not exist', async () => {
@@ -162,6 +170,7 @@ describe('PaymentsService', () => {
       },
     });
     expect(orderCreate).not.toHaveBeenCalled();
+    expect(deactivatePaymentLink).not.toHaveBeenCalled();
     expect(response).toEqual({
       id: LINK_ID,
       skuId: SKU_ID,
@@ -169,6 +178,39 @@ describe('PaymentsService', () => {
       url: 'https://buy.stripe.com/test',
       createdAt: NOW.toISOString(),
     });
+  });
+
+  it('deactivates the Stripe link and rethrows the insert error when the local row is not written', async () => {
+    const failure = new Error('database unavailable');
+    paymentLinkCreate.mockRejectedValue(failure);
+
+    await expect(
+      service.createLink({ skuId: SKU_ID, quantity: 2 }, MANAGER),
+    ).rejects.toBe(failure);
+    expect(deactivatePaymentLink).toHaveBeenCalledTimes(1);
+    expect(deactivatePaymentLink).toHaveBeenCalledWith('plink_1');
+    expect(paymentLinkCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      deactivatePaymentLink.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('keeps the insert error and logs when the Stripe link cannot be deactivated', async () => {
+    const logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const failure = new Error('database unavailable');
+    paymentLinkCreate.mockRejectedValue(failure);
+    deactivatePaymentLink.mockRejectedValue(new Error('Stripe unavailable'));
+
+    await expect(
+      service.createLink({ skuId: SKU_ID, quantity: 2 }, MANAGER),
+    ).rejects.toBe(failure);
+    expect(deactivatePaymentLink).toHaveBeenCalledWith('plink_1');
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      'Payment Link plink_1 has no local row and was not deactivated at Stripe',
+      'Stripe unavailable',
+    );
   });
 
   it('turns a Payment Link provider failure into a detail-free 502', async () => {
