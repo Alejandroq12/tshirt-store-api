@@ -13,7 +13,11 @@ interface TestAppOverrides {
   storage?: Pick<S3StorageService, 'upload' | 'remove'>;
   stripe?: Pick<
     StripeClient,
-    'constructEvent' | 'createPaymentIntent' | 'createPaymentLink'
+    | 'constructEvent'
+    | 'createPaymentIntent'
+    | 'createPaymentLink'
+    | 'cancelPaymentIntent'
+    | 'deactivatePaymentLink'
   >;
 }
 

@@ -43,6 +43,8 @@ describe('Checkout and Stripe payments (e2e)', () => {
   const signer = new Stripe('sk_test_signature_only');
   const createPaymentLink = jest.fn();
   const createPaymentIntent = jest.fn();
+  const cancelPaymentIntent = jest.fn();
+  const deactivatePaymentLink = jest.fn();
   const sendMail = jest.fn();
   const constructEvent = jest.fn(
     (payload: Buffer, signature: string, secret: string) =>
@@ -54,7 +56,13 @@ describe('Checkout and Stripe payments (e2e)', () => {
   beforeAll(async () => {
     app = (await createTestApp({
       mail: { send: sendMail },
-      stripe: { createPaymentLink, createPaymentIntent, constructEvent },
+      stripe: {
+        createPaymentLink,
+        createPaymentIntent,
+        cancelPaymentIntent,
+        deactivatePaymentLink,
+        constructEvent,
+      },
     })) as INestApplication<App>;
     prisma = app.get(PrismaService);
   });
@@ -69,6 +77,14 @@ describe('Checkout and Stripe payments (e2e)', () => {
     createPaymentIntent.mockResolvedValue({
       id: 'pi_checkout',
       client_secret: 'pi_checkout_secret_test',
+    });
+    cancelPaymentIntent.mockResolvedValue({
+      id: 'pi_checkout',
+      status: 'canceled',
+    });
+    deactivatePaymentLink.mockResolvedValue({
+      id: 'plink_checkout',
+      active: false,
     });
     sendMail.mockResolvedValue(undefined);
   });
