@@ -303,7 +303,10 @@ Editor.
   order: `POST /v1/orders` answers 409 with the generic `about:blank` problem,
   because the operation's 409 declares only `empty-cart` and
   `pending-order-exists`.
-- File upload checks declared MIME and size, not file magic bytes or malware.
+- File upload checks the declared MIME type, the size, and that the leading
+  bytes carry the declared type's signature. The image is not decoded, so a
+  file with a valid header and a corrupt body is stored, and there is no
+  malware scan.
 - There is no app health endpoint or tracing. Heroku threshold alerts are not
   available on Basic dynos; metrics are in the Heroku dashboard.
 - `npm audit` is not clean. On 2026-09-09 it reported 11 high dependency
