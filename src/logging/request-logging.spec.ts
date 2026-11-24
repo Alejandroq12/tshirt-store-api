@@ -23,6 +23,14 @@ describe('correlationId', () => {
     expect(response.headers['X-Request-Id']).toBe('abc-123_XYZ');
   });
 
+  it('echoes an id of exactly 64 characters, the longest it accepts', () => {
+    const supplied = 'a'.repeat(64);
+
+    expect(
+      correlationId({ headers: { 'x-request-id': supplied } }, responseSpy()),
+    ).toBe(supplied);
+  });
+
   it('generates one when the caller supplied none', () => {
     const response = responseSpy();
 
