@@ -30,6 +30,10 @@ export class StripeClient {
     return this.client.paymentIntents.create(params, options);
   }
 
+  cancelPaymentIntent(id: string): Promise<Stripe.PaymentIntent> {
+    return this.client.paymentIntents.cancel(id);
+  }
+
   constructEvent(
     payload: Buffer,
     signature: string,
