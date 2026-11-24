@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNotIn,
   IsOptional,
   IsString,
   Matches,
@@ -40,6 +41,31 @@ export enum LogLevel {
 const DURATION = /^\d+(ms|s|m|h|d|w|y)$/;
 
 const STRIPE_API_VERSION = /^\d{4}-\d{2}-\d{2}(\.[a-z]+)?$/;
+
+// Stripe's zero- and three-decimal currencies, from https://docs.stripe.com/currencies.
+const CURRENCIES_WITHOUT_TWO_DECIMALS = [
+  'BIF',
+  'CLP',
+  'DJF',
+  'GNF',
+  'JPY',
+  'KMF',
+  'KRW',
+  'MGA',
+  'PYG',
+  'RWF',
+  'UGX',
+  'VND',
+  'VUV',
+  'XAF',
+  'XOF',
+  'XPF',
+  'BHD',
+  'JOD',
+  'KWD',
+  'OMR',
+  'TND',
+];
 
 const toBoolean = ({ value }: { value: unknown }): unknown => {
   if (typeof value !== 'string') return value;
@@ -158,6 +184,10 @@ export class EnvironmentVariables {
 
   @Matches(/^[A-Z]{3}$/, {
     message: 'STORE_CURRENCY must be an ISO 4217 code such as USD',
+  })
+  @IsNotIn(CURRENCIES_WITHOUT_TWO_DECIMALS, {
+    message:
+      'STORE_CURRENCY must be a currency with two decimal places such as USD (amounts are stored and sent to Stripe in hundredths)',
   })
   STORE_CURRENCY!: string;
 
