@@ -288,7 +288,8 @@ Editor.
 - A Checkout Session's total is recorded as Stripe charged it. The Payment Link
   froze the unit price in Stripe when it was created, and no local copy exists
   to compare it with; only the currency is checked.
-- Money conversion supports only currencies with two decimal places.
+- Money conversion supports only currencies with two decimal places. The boot
+  refuses a `STORE_CURRENCY` with zero or three, such as JPY or KWD.
 - Payment Link buyers are matched to a CLIENT by checkout email.
 - Stock email delivery is at least once, so a crash can cause a duplicate.
 - Heroku Redis TLS is encrypted but does not verify the certificate chain.
