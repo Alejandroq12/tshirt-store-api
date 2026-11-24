@@ -140,6 +140,20 @@ describe('validateEnvironment', () => {
     it.each(['USD', 'EUR', 'GBP'])('accepts %s', (code) => {
       expect(validateEnvironment(withCurrency(code)).STORE_CURRENCY).toBe(code);
     });
+
+    it('reports a lowercase code once, as malformed', () => {
+      let message = '';
+      try {
+        validateEnvironment(withCurrency('jpy'));
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+
+      expect(message).toContain(
+        'STORE_CURRENCY must be an ISO 4217 code such as USD',
+      );
+      expect(message.match(/STORE_CURRENCY/g)).toHaveLength(1);
+    });
   });
 
   describe('TRUST_PROXY', () => {
