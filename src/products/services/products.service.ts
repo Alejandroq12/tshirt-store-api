@@ -8,6 +8,7 @@ import { Prisma, type Product, UserRole } from '@prisma/client';
 
 import type { SessionPrincipal } from '../../auth/types/session-principal';
 import type { EnvironmentVariables } from '../../config/env.validation';
+import { isUniqueViolation } from '../../prisma/prisma-errors';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateProductRequest,
@@ -260,12 +261,7 @@ export class ProductsService {
           update: {},
         });
       } catch (error) {
-        if (
-          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-          error.code !== 'P2002'
-        ) {
-          throw error;
-        }
+        if (!isUniqueViolation(error)) throw error;
       }
     } else {
       await this.prisma.productLike.deleteMany({
