@@ -1,7 +1,8 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 
 import type { SessionPrincipal } from '../types/session-principal';
-import { resolveCurrentUser } from './current-user.decorator';
+import { CurrentUser, resolveCurrentUser } from './current-user.decorator';
 
 const USER: SessionPrincipal = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -30,5 +31,49 @@ describe('resolveCurrentUser', () => {
     expect(resolveCurrentUser({ user: USER }, { optional: true })).toEqual(
       USER,
     );
+  });
+});
+
+describe('CurrentUser', () => {
+  type ParamFactory = (
+    data: unknown,
+    context: ExecutionContext,
+  ) => SessionPrincipal | undefined;
+
+  class Routes {
+    guarded(@CurrentUser() _user: SessionPrincipal): void {}
+
+    optional(@CurrentUser({ optional: true }) _user?: SessionPrincipal): void {}
+  }
+
+  // Nest stores each parameter decorator's factory and its argument on the
+  // handler; this calls them the way the router does for a request.
+  const resolve = (
+    handler: keyof Routes,
+    user?: SessionPrincipal,
+  ): SessionPrincipal | undefined => {
+    const metadata = Reflect.getMetadata(
+      ROUTE_ARGS_METADATA,
+      Routes,
+      handler,
+    ) as Record<string, { data: unknown; factory: ParamFactory }>;
+    const [{ data, factory }] = Object.values(metadata);
+    const context = {
+      switchToHttp: () => ({ getRequest: () => ({ user }) }),
+    } as unknown as ExecutionContext;
+
+    return factory(data, context);
+  };
+
+  it('reads the caller from the HTTP request', () => {
+    expect(resolve('guarded', USER)).toEqual(USER);
+  });
+
+  it('refuses a request with no caller on a guarded parameter', () => {
+    expect(() => resolve('guarded')).toThrow(UnauthorizedException);
+  });
+
+  it('passes { optional: true } through, so an anonymous caller is undefined', () => {
+    expect(resolve('optional')).toBeUndefined();
   });
 });
