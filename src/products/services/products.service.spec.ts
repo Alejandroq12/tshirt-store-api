@@ -430,6 +430,85 @@ describe('ProductsService', () => {
     expect(response.liked).toBeNull();
   });
 
+  describe('the caller-specific parts of a product detail', () => {
+    const FALLBACK = {
+      id: 'fallback-image',
+      productId: PRODUCT.id,
+      url: 'https://cdn.example.com/fallback.webp',
+      s3Key: 'fallback.webp',
+      isFallback: true,
+      isProductPrimary: true,
+      createdAt: NOW,
+      skuAssignments: [],
+    };
+    const SHARED = {
+      id: 'shared-image',
+      productId: PRODUCT.id,
+      url: 'https://cdn.example.com/shared.webp',
+      s3Key: 'shared.webp',
+      isFallback: false,
+      isProductPrimary: false,
+      createdAt: NOW,
+      skuAssignments: [
+        { skuId: 'sku-two', isPrimary: true },
+        { skuId: 'sku-one', isPrimary: false },
+      ],
+    };
+    const SKU_ONE = {
+      id: 'sku-one',
+      productId: PRODUCT.id,
+      skuCode: 'CREW-BLUE-M',
+      size: 'M',
+      color: 'Blue',
+      price: new Prisma.Decimal('19.90'),
+      stockQuantity: 4,
+      createdAt: NOW,
+      updatedAt: NOW,
+      imageAssignments: [{ imageId: SHARED.id, isPrimary: false }],
+    };
+
+    beforeEach(() => {
+      productFindFirst.mockResolvedValue({
+        ...PRODUCT,
+        isActive: true,
+        category: CATEGORY,
+        images: [FALLBACK, SHARED],
+        skus: [SKU_ONE],
+      });
+    });
+
+    it('tells a client who has not liked the product false, not null', async () => {
+      const response = await service.get(PRODUCT.id, CLIENT);
+
+      expect(likeFindFirst).toHaveBeenCalledWith({
+        where: { clientId: CLIENT.id, productId: PRODUCT.id },
+        select: { clientId: true },
+      });
+      expect(response.liked).toBe(false);
+    });
+
+    it.each([
+      ['an anonymous caller', undefined],
+      ['a manager', MANAGER],
+    ])('gives %s a null liked without reading likes', async (_caller, user) => {
+      const response = await service.get(PRODUCT.id, user);
+
+      expect(response.liked).toBeNull();
+      expect(likeFindFirst).not.toHaveBeenCalled();
+    });
+
+    it("does not lend a SKU the product's primary when its own images have none", async () => {
+      const response = await service.get(PRODUCT.id);
+
+      expect(response.primaryImageId).toBe(FALLBACK.id);
+      expect(response.skus[0]).toMatchObject({
+        imageIds: [SHARED.id],
+        primaryImageId: null,
+        imageSource: 'sku',
+      });
+    });
+  });
+
   it('hides non-active and missing products with the same 404', async () => {
     await expect(service.get(PRODUCT.id)).rejects.toThrow(NotFoundException);
     const call = (

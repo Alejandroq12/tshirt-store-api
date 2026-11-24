@@ -46,8 +46,12 @@ createSku(...)
 ```
 
 `@CheckAbilities` sets metadata and applies `AbilitiesGuard` in one decorator.
-`action` is one of `manage | create | read | list | update | delete`; `subject` is a
-Prisma model name from `AppSubjects` in `src/authorization/ability.types.ts`.
+`action` is one of `manage | create | read | list | update | delete`; `subject` is
+one of `AppSubjects` in `src/authorization/ability.types.ts`. That is a Prisma
+model name, with one exception: `'PaymentIntent'` names no table, because a
+Payment Intent is stored on its order. It is a subject of its own so that the
+client-only `createPaymentIntent` does not borrow an `Order` ability granted for
+another operation.
 
 **CASL does not guard the public reads.** `listProducts` and `getProduct` have no
 ability check at all. Visibility there is a `where` clause in the service, not a
@@ -91,10 +95,12 @@ Three things carry the design:
   the same registrar grants a manager two abilities and a client none.
 - The module must import `AuthorizationModule` to inject `CaslAbilityFactory`.
 
-The grant is deliberately narrow. A client gets exactly five rules
-(`update ProductLike`, `manage Cart`, `create`/`list`/`update Order`) and a
-manager eight; `src/authorization/registered-abilities.spec.ts` lists each
-expected ability per role and asserts both rule counts. Do not add
+The grant is deliberately narrow. A client gets exactly six rules
+(`update ProductLike`, `manage Cart`, `create`/`list`/`update Order`,
+`create PaymentIntent`) and a manager eight (`create`/`update Product`,
+`create`/`update ProductSku`, `create ProductImage`, `read`/`update Order`,
+`create PaymentLink`); `src/authorization/registered-abilities.spec.ts` lists
+each expected ability per role and asserts both rule counts. Do not add
 `can('read', 'Product')` to make the model tidier; nothing checks it, and that
 test is the guard against permission creep, so a new rule means updating it on
 purpose.

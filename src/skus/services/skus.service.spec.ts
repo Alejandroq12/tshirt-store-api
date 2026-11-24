@@ -265,6 +265,73 @@ describe('SkusService', () => {
     expect(response.imageSource).toBe('sku');
   });
 
+  it("reports no primary when none of the SKU's own images is primary for it", async () => {
+    const fallback = {
+      id: 'fallback-image',
+      productId: SKU.productId,
+      url: 'https://cdn.example.com/fallback.webp',
+      s3Key: 'fallback.webp',
+      isFallback: true,
+      isProductPrimary: true,
+      createdAt: NOW,
+      skuAssignments: [],
+    };
+    const shared = {
+      id: 'shared-image',
+      productId: SKU.productId,
+      url: 'https://cdn.example.com/shared.webp',
+      s3Key: 'shared.webp',
+      isFallback: false,
+      isProductPrimary: false,
+      createdAt: NOW,
+      skuAssignments: [
+        { skuId: 'other-sku', isPrimary: true },
+        { skuId: SKU.id, isPrimary: false },
+      ],
+    };
+    skuFindFirst.mockResolvedValue({
+      ...SKU,
+      product: { images: [fallback] },
+      imageAssignments: [
+        { imageId: shared.id, isPrimary: false, image: shared },
+      ],
+    });
+
+    const response = await service.get(SKU.id);
+
+    expect(response.images.map(({ id }) => id)).toEqual([shared.id]);
+    expect(response.images[0].primaryForSkuIds).toEqual(['other-sku']);
+    expect(response.primaryImageId).toBeNull();
+    expect(response.imageSource).toBe('sku');
+  });
+
+  it('reports no primary when the product fallback images have none', async () => {
+    skuFindFirst.mockResolvedValue({
+      ...SKU,
+      product: {
+        images: [
+          {
+            id: 'fallback-image',
+            productId: SKU.productId,
+            url: 'https://cdn.example.com/fallback.webp',
+            s3Key: 'fallback.webp',
+            isFallback: true,
+            isProductPrimary: false,
+            createdAt: NOW,
+            skuAssignments: [],
+          },
+        ],
+      },
+      imageAssignments: [],
+    });
+
+    const response = await service.get(SKU.id, MANAGER);
+
+    expect(response.images.map(({ id }) => id)).toEqual(['fallback-image']);
+    expect(response.primaryImageId).toBeNull();
+    expect(response.imageSource).toBe('product');
+  });
+
   it('returns no image source when no images are available', async () => {
     skuFindFirst.mockResolvedValue({
       ...SKU,

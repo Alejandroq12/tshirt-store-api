@@ -1,4 +1,8 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
 
 import type { EnvironmentVariables } from '../config/env.validation';
@@ -95,6 +99,40 @@ describe('S3StorageService', () => {
       );
     });
 
+    it.each([
+      [
+        'leading and trailing slashes',
+        '/products/abc/',
+        /^products\/abc\/[0-9a-f-]{36}\.jpg$/,
+      ],
+      ['only slashes', '///', /^[0-9a-f-]{36}\.jpg$/],
+    ])(
+      'trims %s from a prefix, so no key starts or doubles a slash',
+      async (_case, prefix, key) => {
+        const stored = await serviceWith().upload({
+          body: Buffer.from('a'),
+          contentType: 'image/jpeg',
+          prefix,
+        });
+
+        expect(stored.key).toMatch(key);
+      },
+    );
+
+    it('surfaces an S3 failure instead of returning a URL', async () => {
+      jest
+        .spyOn(S3Client.prototype, 'send')
+        .mockImplementation((() =>
+          Promise.reject(new Error('AccessDenied'))) as never);
+
+      await expect(
+        serviceWith().upload({
+          body: Buffer.from('a'),
+          contentType: 'image/png',
+        }),
+      ).rejects.toThrow('AccessDenied');
+    });
+
     it('maps each accepted content type to its own extension', async () => {
       const service = serviceWith();
 
@@ -111,6 +149,30 @@ describe('S3StorageService', () => {
       );
 
       expect(extensions).toEqual(['jpg', 'png', 'webp']);
+    });
+  });
+
+  describe('remove', () => {
+    it('deletes the object by its key from the configured bucket', async () => {
+      await serviceWith().remove('products/abc/1f0c.webp');
+
+      const [command] = sent as unknown[];
+      expect(command).toBeInstanceOf(DeleteObjectCommand);
+      expect((command as DeleteObjectCommand).input).toEqual({
+        Bucket: 'tshirt-store-images-dev',
+        Key: 'products/abc/1f0c.webp',
+      });
+    });
+
+    it('surfaces a failed delete, so the caller can log the orphaned key', async () => {
+      jest
+        .spyOn(S3Client.prototype, 'send')
+        .mockImplementation((() =>
+          Promise.reject(new Error('SlowDown'))) as never);
+
+      await expect(
+        serviceWith().remove('products/abc/1f0c.webp'),
+      ).rejects.toThrow('SlowDown');
     });
   });
 
@@ -144,6 +206,14 @@ describe('S3StorageService', () => {
 
       expect(service.publicUrl('a/b.png')).toBe(
         'https://cdn.example.com/a/b.png',
+      );
+    });
+
+    it('treats the empty base .env.example ships as not configured', () => {
+      const service = serviceWith({ AWS_S3_PUBLIC_BASE_URL: '' });
+
+      expect(service.publicUrl('a/b.png')).toBe(
+        'https://tshirt-store-images-dev.s3.us-east-1.amazonaws.com/a/b.png',
       );
     });
 

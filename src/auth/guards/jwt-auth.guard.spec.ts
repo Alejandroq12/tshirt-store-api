@@ -146,6 +146,30 @@ describe('JwtAuthGuard', () => {
         UnauthorizedException,
       );
     });
+
+    it('rejects a token whose session was revoked instead of serving it anonymously', async () => {
+      isSessionActive.mockResolvedValue(false);
+      const { context, request } = contextFor({
+        authorization: 'Bearer logged-out',
+      });
+
+      await expect(guardWithOptional().canActivate(context)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(request.user).toBeUndefined();
+    });
+
+    it('serves a header that is not a bearer token as anonymous', async () => {
+      const { context, request } = contextFor({
+        authorization: 'Basic dXNlcjpwYXNz',
+      });
+
+      await expect(guardWithOptional().canActivate(context)).resolves.toBe(
+        true,
+      );
+      expect(request.user).toBeUndefined();
+      expect(verifyAccessToken).not.toHaveBeenCalled();
+    });
   });
 
   describe('the Authorization header', () => {

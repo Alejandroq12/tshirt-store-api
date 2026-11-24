@@ -51,6 +51,28 @@ describe('createSecretScrubber', () => {
     expect(scrub('USD 1025 a')).toBe('USD 1025 a');
   });
 
+  it('censors a value from eight characters, the shortest it treats as secret', () => {
+    const scrub = createSecretScrubber(['abcdefg', 'zyxwvuts']);
+
+    expect(scrub('abcdefg zyxwvuts')).toBe('abcdefg [redacted]');
+  });
+
+  it('censors a URL password on its own only from four characters', () => {
+    const short = createSecretScrubber(['redis://default:abc@cache:6379']);
+    const long = createSecretScrubber(['redis://default:abcd@cache:6379']);
+
+    expect(short('abc')).toBe('abc');
+    expect(long('abcd')).toBe('[redacted]');
+  });
+
+  it('censors a URL without a password as a whole and nothing else', () => {
+    const scrub = createSecretScrubber(['redis://cache.internal:6379']);
+
+    expect(scrub('lost redis://cache.internal:6379 at cache.internal')).toBe(
+      'lost [redacted] at cache.internal',
+    );
+  });
+
   it('ignores undefined entries, so optional configuration is safe to pass', () => {
     const scrub = createSecretScrubber([undefined, 'supersecretvalue']);
 

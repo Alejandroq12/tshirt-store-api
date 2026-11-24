@@ -108,6 +108,29 @@ describe('StockNotificationWorker', () => {
     );
   });
 
+  it('escapes the product name and image URL in the HTML body only', async () => {
+    const name = `Tom & Jerry <Limited> "Crew" Tee's`;
+    const url = 'https://cdn.example.com/a.webp?v=1&w="2"';
+    findUnique.mockResolvedValue({
+      ...notification,
+      product: { ...notification.product, name, images: [{ url }] },
+    });
+
+    await worker.process(job());
+
+    const escapedName =
+      'Tom &amp; Jerry &lt;Limited&gt; &quot;Crew&quot; Tee&#39;s';
+    expect(send).toHaveBeenCalledWith({
+      to: 'client@example.com',
+      subject: `${name} is low in stock`,
+      text: `${name} is low in stock. Product image: ${url}`,
+      html:
+        `<p>${escapedName} is low in stock.</p>` +
+        '<img src="https://cdn.example.com/a.webp?v=1&amp;w=&quot;2&quot;" ' +
+        `alt="${escapedName}">`,
+    });
+  });
+
   it('does not send a notification that is already complete', async () => {
     findUnique.mockResolvedValue({ ...notification, sentAt: NOW });
 

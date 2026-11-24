@@ -89,6 +89,19 @@ describe('StockCycleService', () => {
     },
   );
 
+  it('starts a new cycle the moment stock rises from 3 to 4', async () => {
+    await expect(
+      service.evaluate(transaction, PRODUCT_ID, 3, 4),
+    ).resolves.toEqual([]);
+
+    expect(productUpdate).toHaveBeenCalledWith({
+      where: { id: PRODUCT_ID },
+      data: { lowStockCycle: { increment: 1 } },
+      select: { id: true },
+    });
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
   it('returns aggregate SKU stock and represents a product without SKUs as zero', async () => {
     await expect(service.totalStock(transaction, PRODUCT_ID)).resolves.toBe(7);
     aggregate.mockResolvedValue({ _sum: { stockQuantity: null } });
