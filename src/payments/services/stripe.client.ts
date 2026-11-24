@@ -23,11 +23,19 @@ export class StripeClient {
     return this.client.paymentLinks.create(params);
   }
 
+  deactivatePaymentLink(id: string): Promise<Stripe.PaymentLink> {
+    return this.client.paymentLinks.update(id, { active: false });
+  }
+
   createPaymentIntent(
     params: Stripe.PaymentIntentCreateParams,
     options: Stripe.RequestOptions,
   ): Promise<Stripe.PaymentIntent> {
     return this.client.paymentIntents.create(params, options);
+  }
+
+  cancelPaymentIntent(id: string): Promise<Stripe.PaymentIntent> {
+    return this.client.paymentIntents.cancel(id);
   }
 
   constructEvent(

@@ -100,6 +100,26 @@ describe('StripeClient', () => {
     });
   });
 
+  describe('cancelPaymentIntent', () => {
+    it('cancels the Payment Intent with that id', async () => {
+      const intent = { id: 'pi_1', status: 'canceled' };
+      const cancel = jest
+        .spyOn(
+          Object.getPrototypeOf(
+            signer.paymentIntents,
+          ) as Stripe.PaymentIntentResource,
+          'cancel',
+        )
+        .mockResolvedValue(intent as Stripe.Response<Stripe.PaymentIntent>);
+
+      await expect(clientWith().cancelPaymentIntent('pi_1')).resolves.toBe(
+        intent,
+      );
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(cancel).toHaveBeenCalledWith('pi_1');
+    });
+  });
+
   describe('createPaymentLink', () => {
     it('creates the Payment Link with the given parameters', async () => {
       const link = { id: 'plink_1', url: 'https://buy.stripe.com/test' };
@@ -130,6 +150,26 @@ describe('StripeClient', () => {
 
       await expect(clientWith().createPaymentLink(params)).resolves.toBe(link);
       expect(create).toHaveBeenCalledWith(params);
+    });
+  });
+
+  describe('deactivatePaymentLink', () => {
+    it('sets the Payment Link with that id inactive', async () => {
+      const link = { id: 'plink_1', active: false };
+      const update = jest
+        .spyOn(
+          Object.getPrototypeOf(
+            signer.paymentLinks,
+          ) as Stripe.PaymentLinkResource,
+          'update',
+        )
+        .mockResolvedValue(link as Stripe.Response<Stripe.PaymentLink>);
+
+      await expect(clientWith().deactivatePaymentLink('plink_1')).resolves.toBe(
+        link,
+      );
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith('plink_1', { active: false });
     });
   });
 });

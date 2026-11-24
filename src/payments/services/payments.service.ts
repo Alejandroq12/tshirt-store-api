@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -81,6 +82,7 @@ const stockConflict = (items: InsufficientStockItem[]): ProblemException => {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
   private readonly currency: string;
 
   constructor(
@@ -127,15 +129,21 @@ export class PaymentsService {
       throw new BadGatewayException();
     }
 
-    const link = await this.prisma.paymentLink.create({
-      data: {
-        skuId: sku.id,
-        quantity: input.quantity,
-        stripePaymentLinkId: stripeLink.id,
-        url: stripeLink.url,
-        createdBy: user.id,
-      },
-    });
+    let link;
+    try {
+      link = await this.prisma.paymentLink.create({
+        data: {
+          skuId: sku.id,
+          quantity: input.quantity,
+          stripePaymentLinkId: stripeLink.id,
+          url: stripeLink.url,
+          createdBy: user.id,
+        },
+      });
+    } catch (error) {
+      await this.deactivateUnsavedLink(stripeLink.id);
+      throw error;
+    }
 
     return {
       id: link.id,
@@ -217,5 +225,21 @@ export class PaymentsService {
       amount: order.totalAmount.toFixed(2),
       currency: this.currency,
     };
+  }
+
+  // A live link with no local row can still be paid, and the webhook cannot
+  // match that Checkout Session to a SKU, so the link is switched off. The
+  // insert error is what the caller sees; a failure here is only logged.
+  private async deactivateUnsavedLink(
+    stripePaymentLinkId: string,
+  ): Promise<void> {
+    try {
+      await this.stripe.deactivatePaymentLink(stripePaymentLinkId);
+    } catch (error) {
+      this.logger.error(
+        `Payment Link ${stripePaymentLinkId} has no local row and was not deactivated at Stripe`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 }

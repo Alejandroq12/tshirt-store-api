@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,6 +16,7 @@ import { PROBLEM_TYPE } from '../../common/problems';
 import type { EnvironmentVariables } from '../../config/env.validation';
 import type { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
 import type { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
+import type { StripeClient } from '../../payments/services/stripe.client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import {
   ListMyOrdersQuery,
@@ -144,6 +146,7 @@ describe('OrdersService', () => {
   const totalStock = jest.fn();
   const evaluateStockCycle = jest.fn();
   const enqueueNotifications = jest.fn();
+  const cancelPaymentIntent = jest.fn<Promise<unknown>, [string]>();
   const transactionClient = {
     cart: { findUnique: cartFindUnique },
     cartItem: { update: cartItemUpdate, deleteMany: cartItemDeleteMany },
@@ -169,7 +172,8 @@ describe('OrdersService', () => {
   const notifications = {
     enqueue: enqueueNotifications,
   } as unknown as StockNotificationProducer;
-  const service = new OrdersService(prisma, stockCycle, notifications, {
+  const stripe = { cancelPaymentIntent } as unknown as StripeClient;
+  const service = new OrdersService(prisma, stockCycle, notifications, stripe, {
     get: () => 'USD',
   } as unknown as ConfigService<EnvironmentVariables, true>);
   const historyQuery = (
@@ -198,6 +202,11 @@ describe('OrdersService', () => {
     totalStock.mockResolvedValue(10);
     evaluateStockCycle.mockResolvedValue([]);
     enqueueNotifications.mockResolvedValue(undefined);
+    cancelPaymentIntent.mockResolvedValue({ id: 'pi_pending' });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('snapshots cart fields in stable SKU order and computes totals', async () => {
@@ -688,6 +697,135 @@ describe('OrdersService', () => {
     expect(updateInput.data.cancelledAt).toBeInstanceOf(Date);
     expect(queryRaw).not.toHaveBeenCalled();
     expect(skuUpdate).not.toHaveBeenCalled();
+  });
+
+  describe('the Payment Intent of a cancelled order', () => {
+    const cancelPending = () =>
+      service.updateStatus(
+        ORDER_ID,
+        { status: OrderStatusUpdate.CANCELLED },
+        CLIENT,
+      );
+
+    beforeEach(() => {
+      orderFindFirst.mockResolvedValue(
+        orderFixture(PrismaOrderStatus.PENDING, {
+          stripePaymentIntentId: 'pi_pending',
+        }),
+      );
+      orderFindUniqueOrThrow.mockResolvedValue(
+        orderFixture(PrismaOrderStatus.CANCELLED, {
+          stripePaymentIntentId: 'pi_pending',
+        }),
+      );
+    });
+
+    it('is cancelled at Stripe once, after the cancellation commits', async () => {
+      const committed = jest.fn();
+      transaction.mockImplementationOnce(
+        async (callback: (client: Prisma.TransactionClient) => unknown) => {
+          const result = await callback(
+            transactionClient as unknown as Prisma.TransactionClient,
+          );
+          committed();
+          return result;
+        },
+      );
+
+      await expect(cancelPending()).resolves.toMatchObject({
+        status: 'cancelled',
+      });
+      expect(cancelPaymentIntent).toHaveBeenCalledTimes(1);
+      expect(cancelPaymentIntent).toHaveBeenCalledWith('pi_pending');
+      expect(committed.mock.invocationCallOrder[0]).toBeLessThan(
+        cancelPaymentIntent.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('is taken from the row read after the status update', async () => {
+      orderFindFirst.mockResolvedValue(orderFixture(PrismaOrderStatus.PENDING));
+
+      await cancelPending();
+
+      expect(cancelPaymentIntent).toHaveBeenCalledWith('pi_pending');
+    });
+
+    it('leaves Stripe alone when the pending order never got an intent', async () => {
+      orderFindFirst.mockResolvedValue(orderFixture(PrismaOrderStatus.PENDING));
+      orderFindUniqueOrThrow.mockResolvedValue(
+        orderFixture(PrismaOrderStatus.CANCELLED),
+      );
+
+      await expect(cancelPending()).resolves.toMatchObject({
+        status: 'cancelled',
+      });
+      expect(cancelPaymentIntent).not.toHaveBeenCalled();
+    });
+
+    it.each([PrismaOrderStatus.PAID, PrismaOrderStatus.PROCESSING])(
+      'is not touched at Stripe when the order was %s',
+      async (status) => {
+        orderFindFirst.mockResolvedValue(
+          orderFixture(status, { stripePaymentIntentId: 'pi_paid' }),
+        );
+        orderFindUniqueOrThrow.mockResolvedValue(
+          orderFixture(PrismaOrderStatus.CANCELLED, {
+            paidAt: PAID_AT,
+            stripePaymentIntentId: 'pi_paid',
+          }),
+        );
+
+        await expect(cancelPending()).resolves.toMatchObject({
+          status: 'cancelled',
+        });
+        expect(cancelPaymentIntent).not.toHaveBeenCalled();
+      },
+    );
+
+    it('keeps the cancellation and logs when Stripe refuses, without the client secret', async () => {
+      const logError = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      cancelPaymentIntent.mockRejectedValue(
+        Object.assign(new Error('This PaymentIntent cannot be canceled'), {
+          raw: { payment_intent: { client_secret: 'pi_pending_secret_x' } },
+        }),
+      );
+
+      await expect(cancelPending()).resolves.toMatchObject({
+        id: ORDER_ID,
+        status: 'cancelled',
+      });
+      expect(orderUpdateMany).toHaveBeenCalledTimes(1);
+      expect(logError).toHaveBeenCalledTimes(1);
+      expect(logError).toHaveBeenCalledWith(
+        `Payment Intent pi_pending of cancelled order ${ORDER_ID} was not cancelled at Stripe`,
+        'This PaymentIntent cannot be canceled',
+      );
+      expect(JSON.stringify(logError.mock.calls)).not.toContain('secret');
+    });
+
+    it('is not cancelled at Stripe when the transaction fails to commit', async () => {
+      const failure = new Error('commit failed');
+      transaction.mockImplementationOnce(
+        async (callback: (client: Prisma.TransactionClient) => unknown) => {
+          await callback(
+            transactionClient as unknown as Prisma.TransactionClient,
+          );
+          throw failure;
+        },
+      );
+
+      await expect(cancelPending()).rejects.toBe(failure);
+      expect(cancelPaymentIntent).not.toHaveBeenCalled();
+    });
+
+    it('is not cancelled at Stripe when the cancellation loses a race', async () => {
+      orderUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(cancelPending()).rejects.toThrow(ConflictException);
+      expect(cancelPaymentIntent).not.toHaveBeenCalled();
+    });
   });
 
   it.each([PrismaOrderStatus.PAID, PrismaOrderStatus.PROCESSING])(

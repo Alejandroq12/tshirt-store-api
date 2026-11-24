@@ -39,6 +39,6 @@ class PaymentsAbilityRegistrar implements OnModuleInit {
     ReconciliationWorker,
     PaymentsAbilityRegistrar,
   ],
-  exports: [StripeWebhookService],
+  exports: [StripeClient, StripeWebhookService],
 })
 export class PaymentsModule {}

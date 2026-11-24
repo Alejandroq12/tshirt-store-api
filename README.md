@@ -279,12 +279,17 @@ Editor.
 
 ## Known limits
 
-- Cancelling an Order does not cancel or refund its Stripe Payment Intent. A
-  late payment needs manual reconciliation.
+- Cancelling a pending Order cancels its Stripe Payment Intent after the
+  cancellation commits. If that call fails, it is logged and the intent stays
+  open; the webhook will not pay a cancelled Order, so a late payment stays a
+  pending event for manual reconciliation. Cancelling a paid Order restores
+  stock but refunds nothing: the money goes back through Stripe by hand.
 - Permanent webhook errors have no dead-letter state. Only a succeeded Payment
   Intent that matches no local order — in practice the one Stripe emits
   alongside a Checkout Session — is marked processed, with the reason recorded.
-- A Stripe Payment Link can remain active if its local insert fails.
+- A Stripe Payment Link whose local insert fails is deactivated before the
+  error is returned. If the deactivation also fails, it is logged and the link
+  stays active at Stripe with no local row.
 - A Checkout Session's total is recorded as Stripe charged it. The Payment Link
   froze the unit price in Stripe when it was created, and no local copy exists
   to compare it with; only the currency is checked.

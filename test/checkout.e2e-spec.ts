@@ -43,6 +43,8 @@ describe('Checkout and Stripe payments (e2e)', () => {
   const signer = new Stripe('sk_test_signature_only');
   const createPaymentLink = jest.fn();
   const createPaymentIntent = jest.fn();
+  const cancelPaymentIntent = jest.fn();
+  const deactivatePaymentLink = jest.fn();
   const sendMail = jest.fn();
   const constructEvent = jest.fn(
     (payload: Buffer, signature: string, secret: string) =>
@@ -54,7 +56,13 @@ describe('Checkout and Stripe payments (e2e)', () => {
   beforeAll(async () => {
     app = (await createTestApp({
       mail: { send: sendMail },
-      stripe: { createPaymentLink, createPaymentIntent, constructEvent },
+      stripe: {
+        createPaymentLink,
+        createPaymentIntent,
+        cancelPaymentIntent,
+        deactivatePaymentLink,
+        constructEvent,
+      },
     })) as INestApplication<App>;
     prisma = app.get(PrismaService);
   });
@@ -69,6 +77,14 @@ describe('Checkout and Stripe payments (e2e)', () => {
     createPaymentIntent.mockResolvedValue({
       id: 'pi_checkout',
       client_secret: 'pi_checkout_secret_test',
+    });
+    cancelPaymentIntent.mockResolvedValue({
+      id: 'pi_checkout',
+      status: 'canceled',
+    });
+    deactivatePaymentLink.mockResolvedValue({
+      id: 'plink_checkout',
+      active: false,
     });
     sendMail.mockResolvedValue(undefined);
   });
@@ -396,6 +412,8 @@ describe('Checkout and Stripe payments (e2e)', () => {
       .set('Authorization', `Bearer ${buyerToken}`)
       .send({ status: 'cancelled' })
       .expect(200);
+    // A paid order's money goes back through Stripe by hand.
+    expect(cancelPaymentIntent).not.toHaveBeenCalled();
     await expect(
       prisma.product.findUniqueOrThrow({ where: { id: product.id } }),
     ).resolves.toMatchObject({ lowStockCycle: 1 });
@@ -505,6 +523,34 @@ describe('Checkout and Stripe payments (e2e)', () => {
     expect(order.items[0].lineTotal.toFixed(2)).toBe('50.00');
     expect(currentSku.stockQuantity).toBe(3);
     expect(cartItem.quantity).toBe(4);
+  });
+
+  it('deactivates the Stripe Payment Link when its local row cannot be stored', async () => {
+    const manager = await createManager(prisma);
+    const managerToken = await login(manager);
+    const { sku } = await createProductWithSku(prisma, { isActive: true });
+    // payment_links.url is varchar(500), so the insert fails after Stripe
+    // has created the link.
+    createPaymentLink.mockResolvedValueOnce({
+      id: 'plink_unsaved',
+      url: `https://buy.stripe.com/${'x'.repeat(500)}`,
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/payment-links')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ skuId: sku.id, quantity: 1 })
+      .expect(500);
+
+    expect(response.body).toEqual({
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+      instance: '/v1/payment-links',
+    });
+    expect(deactivatePaymentLink).toHaveBeenCalledTimes(1);
+    expect(deactivatePaymentLink).toHaveBeenCalledWith('plink_unsaved');
+    await expect(prisma.paymentLink.count()).resolves.toBe(0);
   });
 
   const checkoutIntentEvent = (intentId: string) => ({
@@ -694,6 +740,78 @@ describe('Checkout and Stripe payments (e2e)', () => {
         where: { stripeEventId: strippedEvent.id },
       }),
     ).resolves.toMatchObject({ orderId, errorMessage: null });
+  });
+
+  // Cart, order and Payment Intent for two units of one SKU. The stubbed
+  // intent is pi_checkout.
+  const placeOrderWithIntent = async (token: string, skuId: string) => {
+    await request(app.getHttpServer())
+      .post('/v1/me/cart/items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ skuId, quantity: 2 })
+      .expect(201);
+    const orderResponse = await request(app.getHttpServer())
+      .post('/v1/orders')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+    const orderId = (orderResponse.body as CreatedOrderBody).id;
+    await request(app.getHttpServer())
+      .post('/v1/payment-intents')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ orderId })
+      .expect(201);
+
+    return orderId;
+  };
+
+  const cancelOrder = (token: string, orderId: string) =>
+    request(app.getHttpServer())
+      .patch(`/v1/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'cancelled' });
+
+  it('cancels the Payment Intent at Stripe when its pending order is cancelled', async () => {
+    const client = await createClient(prisma);
+    const token = await login(client);
+    const { sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      stockQuantity: 10,
+    });
+    const orderId = await placeOrderWithIntent(token, sku.id);
+
+    const response = await cancelOrder(token, orderId).expect(200);
+
+    expect(response.body).toMatchObject({ id: orderId, status: 'cancelled' });
+    expect(cancelPaymentIntent).toHaveBeenCalledTimes(1);
+    expect(cancelPaymentIntent).toHaveBeenCalledWith('pi_checkout');
+    await expect(
+      prisma.order.findUniqueOrThrow({ where: { id: orderId } }),
+    ).resolves.toMatchObject({
+      status: OrderStatus.CANCELLED,
+      stripePaymentIntentId: 'pi_checkout',
+    });
+  });
+
+  it('keeps the cancellation when Stripe cannot cancel the Payment Intent', async () => {
+    const client = await createClient(prisma);
+    const token = await login(client);
+    const { sku } = await createProductWithSku(prisma, {
+      isActive: true,
+      stockQuantity: 10,
+    });
+    const orderId = await placeOrderWithIntent(token, sku.id);
+    cancelPaymentIntent.mockRejectedValueOnce(new Error('Stripe unavailable'));
+
+    const response = await cancelOrder(token, orderId).expect(200);
+
+    expect(response.body).toMatchObject({ id: orderId, status: 'cancelled' });
+    expect(cancelPaymentIntent).toHaveBeenCalledTimes(1);
+    await expect(
+      prisma.order.findUniqueOrThrow({ where: { id: orderId } }),
+    ).resolves.toMatchObject({ status: OrderStatus.CANCELLED });
+    await expect(
+      prisma.productSku.findUniqueOrThrow({ where: { id: sku.id } }),
+    ).resolves.toMatchObject({ stockQuantity: 10 });
   });
 
   it('rolls back every payment effect and keeps the event pending when stock changed', async () => {
