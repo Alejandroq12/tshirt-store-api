@@ -12,6 +12,7 @@ import {
 import { ThrottlerException } from '@nestjs/throttler';
 import { Prisma } from '@prisma/client';
 
+import { createSecretScrubber } from '../../logging/secret-scrubber';
 import {
   PROBLEM_TYPE,
   ProblemDetail,
@@ -323,6 +324,66 @@ describe('ProblemExceptionFilter', () => {
 
       expect(logged).toHaveBeenCalledTimes(1);
     });
+
+    it('censors a configured secret in the stack it logs', () => {
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const scrubbing = new ProblemExceptionFilter(
+        createSecretScrubber(['postgresql://tshirt:hunter2pass@db:5432/store']),
+      );
+      const { host } = capture();
+
+      scrubbing.catch(
+        new Error('password authentication failed: hunter2pass'),
+        host,
+      );
+
+      const [message, stack] = logged.mock.calls[0] as [string, string];
+      expect(message).toBe('POST /v1/orders responded 500');
+      expect(stack).toContain('password authentication failed: [redacted]');
+      expect(stack).not.toContain('hunter2pass');
+    });
+
+    it('logs the cause of a 502 it answers without detail', () => {
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const { host } = capture();
+
+      filter.catch(new BadGatewayException('Stripe timed out'), host);
+
+      const [message, stack] = logged.mock.calls[0] as [string, string];
+      expect(message).toBe('POST /v1/orders responded 502');
+      expect(stack).toContain('Stripe timed out');
+    });
+
+    it.each([
+      ['a string', 'pool exhausted'],
+      ['null', null],
+    ])(
+      'answers a thrown %s, which is not an Error, with a bare 500',
+      (_case, thrown) => {
+        const logged = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        const { host, captured } = capture();
+
+        filter.catch(thrown, host);
+
+        expect(captured.status).toBe(500);
+        expect(captured.body).toEqual({
+          type: PROBLEM_TYPE.BLANK,
+          title: 'Internal Server Error',
+          status: 500,
+          instance: '/v1/orders',
+        });
+        expect(logged).toHaveBeenCalledWith(
+          'POST /v1/orders responded 500',
+          String(thrown),
+        );
+      },
+    );
   });
 
   describe('rejections from the body parser', () => {
