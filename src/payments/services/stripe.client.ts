@@ -23,6 +23,10 @@ export class StripeClient {
     return this.client.paymentLinks.create(params);
   }
 
+  deactivatePaymentLink(id: string): Promise<Stripe.PaymentLink> {
+    return this.client.paymentLinks.update(id, { active: false });
+  }
+
   createPaymentIntent(
     params: Stripe.PaymentIntentCreateParams,
     options: Stripe.RequestOptions,

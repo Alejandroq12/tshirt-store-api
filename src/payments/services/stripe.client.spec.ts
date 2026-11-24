@@ -152,4 +152,24 @@ describe('StripeClient', () => {
       expect(create).toHaveBeenCalledWith(params);
     });
   });
+
+  describe('deactivatePaymentLink', () => {
+    it('sets the Payment Link with that id inactive', async () => {
+      const link = { id: 'plink_1', active: false };
+      const update = jest
+        .spyOn(
+          Object.getPrototypeOf(
+            signer.paymentLinks,
+          ) as Stripe.PaymentLinkResource,
+          'update',
+        )
+        .mockResolvedValue(link as Stripe.Response<Stripe.PaymentLink>);
+
+      await expect(clientWith().deactivatePaymentLink('plink_1')).resolves.toBe(
+        link,
+      );
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith('plink_1', { active: false });
+    });
+  });
 });
