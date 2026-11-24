@@ -525,6 +525,34 @@ describe('Checkout and Stripe payments (e2e)', () => {
     expect(cartItem.quantity).toBe(4);
   });
 
+  it('deactivates the Stripe Payment Link when its local row cannot be stored', async () => {
+    const manager = await createManager(prisma);
+    const managerToken = await login(manager);
+    const { sku } = await createProductWithSku(prisma, { isActive: true });
+    // payment_links.url is varchar(500), so the insert fails after Stripe
+    // has created the link.
+    createPaymentLink.mockResolvedValueOnce({
+      id: 'plink_unsaved',
+      url: `https://buy.stripe.com/${'x'.repeat(500)}`,
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/payment-links')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ skuId: sku.id, quantity: 1 })
+      .expect(500);
+
+    expect(response.body).toEqual({
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+      instance: '/v1/payment-links',
+    });
+    expect(deactivatePaymentLink).toHaveBeenCalledTimes(1);
+    expect(deactivatePaymentLink).toHaveBeenCalledWith('plink_unsaved');
+    await expect(prisma.paymentLink.count()).resolves.toBe(0);
+  });
+
   const checkoutIntentEvent = (intentId: string) => ({
     id: `evt_${randomUUID()}`,
     type: 'payment_intent.succeeded',
