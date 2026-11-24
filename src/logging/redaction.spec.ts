@@ -1,4 +1,20 @@
+import pino from 'pino';
+
 import { REDACT_PATHS, REDACTED, SECRET_VARIABLES } from './redaction';
+
+// Logs one object through pino configured as LoggingModule configures it and
+// returns the line pino wrote.
+const logged = (payload: object): Record<string, unknown> => {
+  const lines: string[] = [];
+  const logger = pino(
+    { redact: { paths: [...REDACT_PATHS], censor: REDACTED } },
+    { write: (line: string) => lines.push(line) },
+  );
+
+  logger.info(payload, 'event');
+
+  return JSON.parse(lines[0]) as Record<string, unknown>;
+};
 
 describe('REDACT_PATHS', () => {
   const covers = (path: string): boolean => REDACT_PATHS.includes(path);
@@ -55,5 +71,61 @@ describe('REDACT_PATHS', () => {
 
   it('lists no path twice', () => {
     expect(new Set(REDACT_PATHS).size).toBe(REDACT_PATHS.length);
+  });
+});
+
+describe('REDACT_PATHS applied by pino', () => {
+  it('censors the credentials on a logged request', () => {
+    const line = logged({
+      req: {
+        headers: {
+          authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.e30.sig',
+          cookie: 'session=abc',
+          'stripe-signature': 't=1,v1=deadbeef',
+          'user-agent': 'curl/8.0',
+        },
+        body: {
+          email: 'ana@example.com',
+          password: 'correct horse battery',
+          refreshToken: 'refresh-token-value',
+        },
+      },
+    });
+
+    expect(line.req).toEqual({
+      headers: {
+        authorization: REDACTED,
+        cookie: REDACTED,
+        'stripe-signature': REDACTED,
+        'user-agent': 'curl/8.0',
+      },
+      body: {
+        email: 'ana@example.com',
+        password: REDACTED,
+        refreshToken: REDACTED,
+      },
+    });
+  });
+
+  it('censors a secret field one level down in a logged object', () => {
+    const line = logged({
+      user: { id: 'u-1', passwordHash: '$argon2id$v=19$m=19456' },
+    });
+
+    expect(line.user).toEqual({ id: 'u-1', passwordHash: REDACTED });
+  });
+
+  it('censors a configuration secret up to two levels down', () => {
+    const line = logged({
+      DATABASE_URL: 'postgresql://tshirt:hunter2@db:5432/store',
+      config: { STRIPE_SECRET_KEY: 'sk_test_123' },
+      boot: { env: { JWT_ACCESS_SECRET: 'a'.repeat(32), PORT: 3000 } },
+    });
+
+    expect(line.DATABASE_URL).toBe(REDACTED);
+    expect(line.config).toEqual({ STRIPE_SECRET_KEY: REDACTED });
+    expect(line.boot).toEqual({
+      env: { JWT_ACCESS_SECRET: REDACTED, PORT: 3000 },
+    });
   });
 });
