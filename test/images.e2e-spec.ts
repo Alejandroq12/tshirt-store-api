@@ -370,6 +370,50 @@ describe('Product images (e2e)', () => {
     ).expect(404);
   });
 
+  it('answers 415 for bytes that are not the declared image and stores nothing', async () => {
+    const product = await createProduct();
+    const manager = await login('MANAGER');
+    const path = `/v1/products/${product.id}/images`;
+    const upload = (file: Buffer, contentType: string) =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${manager.accessToken}`)
+        .attach('file', file, { filename: 'shirt.img', contentType });
+
+    const refusals = [
+      await upload(Buffer.alloc(4, 1), 'image/gif').expect(415),
+      await upload(Buffer.from('not an image, only text'), 'image/png').expect(
+        415,
+      ),
+      await upload(imageBytes('image/jpeg'), 'image/webp').expect(415),
+    ];
+
+    for (const response of refusals) {
+      expect(response.headers['content-type']).toContain(
+        'application/problem+json',
+      );
+      expect(response.body).toEqual({
+        type: 'about:blank',
+        title: 'Unsupported Media Type',
+        status: 415,
+        instance: path,
+      });
+    }
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(
+      await prisma.productImage.count({ where: { productId: product.id } }),
+    ).toBe(0);
+
+    const png = imageBytes('image/png');
+    await upload(png, 'image/png').expect(201);
+    expect(storageUpload).toHaveBeenCalledTimes(1);
+    expect(storageUpload).toHaveBeenCalledWith({
+      body: png,
+      contentType: 'image/png',
+      prefix: `products/${product.id}`,
+    });
+  });
+
   it('answers an unexpected or repeated file part with 422', async () => {
     const product = await createProduct();
     const manager = await login('MANAGER');
