@@ -325,6 +325,46 @@ describe('AuthService', () => {
     });
   });
 
+  it('looks an account up by its lowercased email on login and reset', async () => {
+    userFindUnique.mockResolvedValue(USER);
+    await serviceWith().login({
+      email: 'Ana@Example.COM',
+      password: 'example-password',
+    });
+    await serviceWith().forgotPassword('Ana@Example.COM');
+
+    const lookups = (
+      userFindUnique.mock.calls as Array<[{ where: { email: string } }]>
+    ).map(([query]) => query.where);
+    expect(lookups).toEqual([
+      { email: 'ana@example.com' },
+      { email: 'ana@example.com' },
+    ]);
+  });
+
+  it.each([
+    ['500ms', 500],
+    ['30s', 30_000],
+    ['15m', 900_000],
+    ['2h', 7_200_000],
+    ['1d', 86_400_000],
+    ['1w', 604_800_000],
+    ['1y', 31_536_000_000],
+  ])(
+    'expires a reset token issued with a %s TTL that long after now',
+    async (ttl, milliseconds) => {
+      userFindUnique.mockResolvedValue({ id: USER.id, email: USER.email });
+
+      await serviceWith(ttl).forgotPassword(USER.email);
+
+      expect(resetCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          expiresAt: new Date(NOW.getTime() + milliseconds),
+        }) as object,
+      });
+    },
+  );
+
   it('reveals nothing and sends nothing for an unknown reset email', async () => {
     userFindUnique.mockResolvedValue(null);
 
