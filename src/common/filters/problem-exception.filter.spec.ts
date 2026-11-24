@@ -1,5 +1,6 @@
 import {
   ArgumentsHost,
+  BadGatewayException,
   BadRequestException,
   ForbiddenException,
   HttpException,
@@ -8,6 +9,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import { Prisma } from '@prisma/client';
 
 import {
@@ -115,6 +117,41 @@ describe('ProblemExceptionFilter', () => {
       filter.catch(new HttpException('', status), host);
       expect(captured.body.title).toBe(title);
     }
+  });
+
+  it.each([
+    [418, 'Error'],
+    [507, 'Internal Server Error'],
+  ])(
+    'falls back to a generic title for %i, which has no name of its own',
+    (status, title) => {
+      const { host, captured } = capture();
+
+      filter.catch(new HttpException('', status), host);
+
+      expect(captured.status).toBe(status);
+      expect(captured.body.title).toBe(title);
+    },
+  );
+
+  it('renders a throttled password reset as 429 with the configured message', () => {
+    const { host, captured } = capture();
+
+    filter.catch(
+      new ThrottlerException(
+        'Too many password-reset requests. Try again later.',
+      ),
+      host,
+    );
+
+    expect(captured.status).toBe(429);
+    expect(captured.body).toEqual({
+      type: PROBLEM_TYPE.BLANK,
+      title: 'Too Many Requests',
+      status: 429,
+      detail: 'Too many password-reset requests. Try again later.',
+      instance: '/v1/orders',
+    });
   });
 
   it('passes an explicit client-safe message through as detail', () => {
@@ -249,6 +286,23 @@ describe('ProblemExceptionFilter', () => {
       );
 
       expect(captured.body.type).toBe(PROBLEM_TYPE.EMPTY_CART);
+    });
+
+    it('keeps the 502 a payment route throws, without its detail', () => {
+      const { host, captured } = capture();
+
+      filter.catch(
+        new BadGatewayException('Stripe rejected the request for acct_123'),
+        host,
+      );
+
+      expect(captured.status).toBe(502);
+      expect(captured.body).toEqual({
+        type: PROBLEM_TYPE.BLANK,
+        title: 'Bad Gateway',
+        status: 502,
+        instance: '/v1/orders',
+      });
     });
 
     it('drops the detail of a 5xx even when one was supplied', () => {
