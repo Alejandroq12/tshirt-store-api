@@ -110,6 +110,38 @@ describe('validateEnvironment', () => {
     ).toThrow(expected);
   });
 
+  describe('STORE_CURRENCY', () => {
+    const withCurrency = (code: string) => ({
+      ...completeEnvironment(),
+      STORE_CURRENCY: code,
+    });
+
+    const twoDecimalsOnly =
+      /STORE_CURRENCY must be a currency with two decimal places/;
+
+    it.each(['JPY', 'KRW', 'CLP'])(
+      'refuses %s, which has no decimal places',
+      (code) => {
+        expect(() => validateEnvironment(withCurrency(code))).toThrow(
+          twoDecimalsOnly,
+        );
+      },
+    );
+
+    it.each(['KWD', 'BHD', 'TND'])(
+      'refuses %s, which has three decimal places',
+      (code) => {
+        expect(() => validateEnvironment(withCurrency(code))).toThrow(
+          twoDecimalsOnly,
+        );
+      },
+    );
+
+    it.each(['USD', 'EUR', 'GBP'])('accepts %s', (code) => {
+      expect(validateEnvironment(withCurrency(code)).STORE_CURRENCY).toBe(code);
+    });
+  });
+
   describe('TRUST_PROXY', () => {
     it('defaults to not trusting any proxy', () => {
       const { ...withoutTrustProxy } = completeEnvironment();
