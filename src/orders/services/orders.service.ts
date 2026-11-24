@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -23,6 +24,7 @@ import {
 import type { EnvironmentVariables } from '../../config/env.validation';
 import { StockCycleService } from '../../notifications/stock-cycle/stock-cycle.service';
 import { StockNotificationProducer } from '../../notifications/delivery/stock-notification.producer';
+import { StripeClient } from '../../payments/services/stripe.client';
 import { isUniqueViolation } from '../../prisma/prisma-errors';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -116,12 +118,14 @@ const orderTotalProblem = (): ProblemException =>
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
   private readonly currency: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly stockCycle: StockCycleService,
     private readonly notifications: StockNotificationProducer,
+    private readonly stripe: StripeClient,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.currency = config.get('STORE_CURRENCY', { infer: true });
@@ -330,11 +334,43 @@ export class OrdersService {
         include: ORDER_INCLUDE,
       });
 
-      return { order, notificationIds };
+      // Only a pending order's intent can still take a payment; a paid one is
+      // refunded by hand. The id comes from the row read after the status
+      // update, which holds its lock, so an intent claimed while this request
+      // ran is not missed.
+      const openIntentId =
+        input.status === OrderStatusUpdate.CANCELLED &&
+        current.status === PrismaOrderStatus.PENDING
+          ? order.stripePaymentIntentId
+          : null;
+
+      return { order, notificationIds, openIntentId };
     });
 
     await this.notifications.enqueue(result.notificationIds);
+    if (result.openIntentId) {
+      await this.cancelPaymentIntent(orderId, result.openIntentId);
+    }
     return this.orderResponse(result.order);
+  }
+
+  // Runs after commit, so a Stripe outage never holds row locks or undoes the
+  // cancellation. If it fails the intent stays open; the webhook refuses to pay
+  // a cancelled order, so a late payment waits as a pending event for manual
+  // reconciliation. Only the message is logged: a Stripe error can carry the
+  // whole Payment Intent, client_secret included.
+  private async cancelPaymentIntent(
+    orderId: string,
+    paymentIntentId: string,
+  ): Promise<void> {
+    try {
+      await this.stripe.cancelPaymentIntent(paymentIntentId);
+    } catch (error) {
+      this.logger.error(
+        `Payment Intent ${paymentIntentId} of cancelled order ${orderId} was not cancelled at Stripe`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   private requireRoleFor(status: OrderStatusUpdate, role: UserRole): void {
